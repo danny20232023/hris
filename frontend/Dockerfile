@@ -1,16 +1,22 @@
 # Frontend Dockerfile
 # Multi-stage build: Node for building, Nginx for serving
 
-# Stage 1: Build
-FROM node:18-alpine AS builder
+# ============================
+# STAGE 1: Build (use Debian, not Alpine)
+# ============================
+FROM node:20-bullseye AS builder
 
 WORKDIR /app
+
+# 🔥 REQUIRED FIX — disable Rollup native binaries
+ENV ROLLUP_DISABLE_NATIVE=1
+ENV npm_config_optional=false
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies cleanly
+RUN rm -rf node_modules package-lock.json && npm install
 
 # Copy source files
 COPY . .
@@ -19,25 +25,22 @@ COPY . .
 ARG VITE_API_URL
 ARG VITE_UPLOADS_URL
 
-# Set environment variables for build
+# Set environment variables for the build
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_UPLOADS_URL=${VITE_UPLOADS_URL}
 
 # Build the application
 RUN npm run build
 
-# Stage 2: Production
-FROM nginx:alpine
+# ============================
+# STAGE 2: Production (use stable Alpine nginx)
+# ============================
+FROM nginx:1.25-alpine
 
-# Copy built files from builder stage
+# Copy built frontend files
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy custom nginx configuration (if needed)
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Expose port 80
+# Expose nginx port
 EXPOSE 80
 
-# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
-
