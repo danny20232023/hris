@@ -5,18 +5,19 @@ FROM node:20-bullseye AS builder
 
 WORKDIR /app
 
-# 🔥 REQUIRED FIXES
 ENV ROLLUP_DISABLE_NATIVE=1
-ENV npm_config_optional=false
+
+# Create .npmrc to disable optional dependencies
+RUN echo "optional=false" > .npmrc
 
 # Copy package files
 COPY package*.json ./
 
-# ❗ IMPORTANT: Remove lockfile to avoid Rollup native binary install
+# Remove lockfile
 RUN rm -f package-lock.json
 
-# Install deps cleanly with proper optional dependency handling
-RUN npm install --legacy-peer-deps --omit=optional
+# Clean install without optional deps
+RUN npm install --omit=optional --no-audit --no-fund
 
 # Copy source code
 COPY . .
