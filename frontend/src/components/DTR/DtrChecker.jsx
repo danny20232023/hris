@@ -11,7 +11,7 @@ import PrintMyDTRChecker from './PrintMyDTRChecker';
 import PrintMyDTRRaw from './PrintMyDTRRaw';
 import api from '../../utils/api';
 import { getEmployeeShiftSchedule, extractTimeFromTimestamp } from '../../utils/shiftScheduleUtils';
-import MyDtrCdoCredit from './myDtrCdoCredit';
+import MyDtrCdoCredit from './MyDTRCdoCredit';
 
 // Utility to extract "HH:mm" from a string or Date
 const getTimeOnly = (val) => {
