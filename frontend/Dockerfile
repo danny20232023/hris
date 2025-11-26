@@ -1,12 +1,8 @@
-# ============================
-# Stage 1 — Build
-# ============================
 FROM node:20-bullseye AS builder
 
 WORKDIR /app
 
 ENV ROLLUP_DISABLE_NATIVE=1
-ENV npm_config_build_from_source=true
 
 # Copy package files
 COPY package*.json ./
@@ -14,11 +10,8 @@ COPY package*.json ./
 # Remove both lockfile AND node_modules to force clean install
 RUN rm -rf package-lock.json node_modules
 
-# Install with explicit Rollup pre-built binary for Linux
-RUN npm install --save-optional=false --no-save @rollup/rollup-linux-x64-gnu@latest
-
-# Now do regular install
-RUN npm install --omit=optional
+# Install WITH optional dependencies (required for esbuild and rollup binaries)
+RUN npm install
 
 # Copy source code
 COPY . .
