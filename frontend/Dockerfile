@@ -6,18 +6,19 @@ FROM node:20-bullseye AS builder
 WORKDIR /app
 
 ENV ROLLUP_DISABLE_NATIVE=1
-
-# Create .npmrc to disable optional dependencies
-RUN echo "optional=false" > .npmrc
+ENV npm_config_build_from_source=true
 
 # Copy package files
 COPY package*.json ./
 
-# Remove lockfile
-RUN rm -f package-lock.json
+# Remove both lockfile AND node_modules to force clean install
+RUN rm -rf package-lock.json node_modules
 
-# Clean install without optional deps
-RUN npm install --omit=optional --no-audit --no-fund
+# Install with explicit Rollup pre-built binary for Linux
+RUN npm install --save-optional=false --no-save @rollup/rollup-linux-x64-gnu@latest
+
+# Now do regular install
+RUN npm install --omit=optional
 
 # Copy source code
 COPY . .
