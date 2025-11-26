@@ -1,0 +1,1 @@
+{"Data":"RFBfTkFUSVZFX0ZJTkdFUlBSSU5UX0RBVEFfMTc1OTczOTU2MjgxMQ==","Header":"DigitalPersona_Win32","Version":1,"QualityScore":90,"TemplateType":"FMD_WIN32","ProcessedBy":"DigitalPersona PowerShell Win32 SDK","EnrollmentDate":"2025-10-06T08:32:42.861Z","DeviceName":"DigitalPersona Reader (Win32)","IsNative":true}

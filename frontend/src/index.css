@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fix for dropdown option text color - More specific selectors */
+select option {
+  color: #1f2937 !important;
+  background-color: white !important;
+  background: white !important;
+}
+
+/* Ensure select elements have proper text color */
+select {
+  color: #1f2937 !important;
+}
+
+/* Additional specificity for form selects */
+form select option {
+  color: #1f2937 !important;
+  background-color: white !important;
+  background: white !important;
+}
+
+/* Target specific component selects */
+.w-full select option {
+  color: #1f2937 !important;
+  background-color: white !important;
+  background: white !important;
+}
+
+/* Override any potential dark mode or theme styles */
+select option[style*="color"] {
+  color: #1f2937 !important;
+}
+
+/* Specific class for leave type selects */
+.leave-type-select option {
+  color: #1f2937 !important;
+  background-color: white !important;
+  background: white !important;
+}
+
+/* Force text color with maximum specificity */
+.leave-type-select option[style*="color"] {
+  color: #1f2937 !important;
+}
+
+/* Ultra-specific CSS rules for debugging */
+.leave-type-select option {
+  color: #1f2937 !important;
+  background-color: white !important;
+  background: white !important;
+  color: rgb(31, 41, 55) !important;
+}
+
+/* Even more specific */
+div .leave-type-select option {
+  color: #1f2937 !important;
+  background-color: white !important;
+}
+
+/* Nuclear option - target all possible selectors */
+html body div .leave-type-select option {
+  color: #1f2937 !important;
+  background-color: white !important;
+  background: white !important;
+}
+
