@@ -15,8 +15,8 @@ COPY package*.json ./
 # ❗ IMPORTANT: Remove lockfile to avoid Rollup native binary install
 RUN rm -f package-lock.json
 
-# Install deps cleanly
-RUN npm install --legacy-peer-deps
+# Install deps cleanly with proper optional dependency handling
+RUN npm install --legacy-peer-deps --omit=optional
 
 # Copy source code
 COPY . .
