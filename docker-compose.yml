@@ -51,6 +51,8 @@ services:
         - VITE_UPLOADS_URL=${VITE_UPLOADS_URL:-https://${DOMAIN_NAME:-hris.dalaguete.gov.ph}/uploads}
     container_name: hris-frontend
     restart: unless-stopped
+    volumes:
+      - frontend:/usr/share/nginx/html
     networks:
       - hris-network
     healthcheck:
@@ -75,6 +77,7 @@ services:
     volumes:
       - ./nginx/nginx.conf.template:/etc/nginx/templates/nginx.conf.template:ro
       - ./nginx/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - frontend:/usr/share/nginx/html:ro
       # Uncomment for SSL certificates
       # - ./nginx/ssl:/etc/nginx/ssl:ro
     entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
@@ -92,6 +95,8 @@ services:
 # Volumes
 volumes:
   backend-uploads:
+    driver: local
+  frontend:
     driver: local
 
 # Networks
