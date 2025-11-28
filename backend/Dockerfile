@@ -1,27 +1,25 @@
-FROM node:18-alpine
+# Backend Dockerfile - Using Debian-based image for better compatibility
+FROM node:18-slim
 
 WORKDIR /app
 
-# Install required build tools for native modules (sharp, etc.)
-RUN apk add --no-cache \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
     python3 \
     make \
     g++ \
-    cairo-dev \
-    jpeg-dev \
-    pango-dev \
-    giflib-dev \
-    pixman-dev \
-    wget
+    && rm -rf /var/lib/apt/lists/*
+
+# Create node user for security
+RUN useradd -m -u 1000 node || true
 
 # Copy package files
 COPY package*.json ./
 
-# Remove package-lock to force clean install
-RUN rm -f package-lock.json
-
-# Install dependencies WITH optional deps for sharp
-RUN npm install
+# Install dependencies
+RUN npm ci --only=production
 
 # Copy source files
 COPY --chown=node:node . .
@@ -41,9 +39,6 @@ EXPOSE 5000
 ENV NODE_ENV=production
 ENV PORT=5000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost:5000/health || exit 1
-
 # Start the application
 CMD ["node", "server.js"]
+

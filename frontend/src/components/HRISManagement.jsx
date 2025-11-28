@@ -19,6 +19,7 @@ import EnrollEmployeeBio from './DTR/EnrollEmployeeBio';
 import DTRShifts from './DTR/DTRShifts';
 import DTRHolidays from './DTR/DTRHolidays';
 import DTREmployee_cdo from './DTR/DTREmployee_cdo';
+import DTROTtab from './DTR/DTROTtab';
 // Note: Embedded/Modal components (not separate menu items):
 // - RawLogsView_Management, ShiftSchedView_Management are in TimeLogsManagement
 // - RawLogsView_Dtr, MyShiftView are in DtrChecker
@@ -400,6 +401,7 @@ const HRISManagement = () => {
     if (componentId === 'compute-attendance-report' || componentId === 'computed-attendances' || (activeTab === 'DTR-Reports' && (activeSubTab === 'compute-attendance-report' || activeSubTab === 'computed-attendances'))) return <ComputedAttendanceReport />;
     if (componentId === 'print-locator-entries') return <PrintLocatorEntries />;
     if (componentId === 'dtr-cdo') return <DTREmployee_cdo />;
+    if (componentId === 'dtr-overtime') return <DTROTtab />;
     
     // Portal Users component (under DTR parent menu)
     if (componentId === 'portal-users') return <DTRPortalUsersTabs />;
@@ -564,6 +566,19 @@ const HRISManagement = () => {
                     >
                       <span className="mr-2">📝</span>
                       <span className="flex-1 text-left">CDO</span>
+                    </button>
+                  )}
+                  {canAccessPage('dtr-overtime') && (
+                    <button
+                      onClick={() => handleDtrSubTabClick('dtr-overtime')}
+                      className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-200 ${
+                        activeSubTab === 'dtr-overtime'
+                          ? 'bg-blue-50 text-blue-700 font-medium'
+                          : 'text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="mr-2">⏰</span>
+                      <span className="flex-1 text-left">Overtime</span>
                     </button>
                   )}
                   {canAccessPage('201-locator') && (

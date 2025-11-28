@@ -1,10 +1,11 @@
 import { getHR201Pool } from '../config/hr201Database.js';
 
 const ROOT_ADMIN_ID = 1; // Supreme bypass - usertype.id = 1
+const ROOT_ADMIN_USER_ID = 1; // Supreme bypass - sysusers.id = 1
 
 /**
  * Check if user has permission for a specific component and action
- * Root Admin (usertype=1) always returns true
+ * Root Admin (usertype=1 or sysusers.id=1) always returns true
  * @param {Object} req - Express request object with req.user (from JWT)
  * @param {string} componentName - Component name (e.g., 'dtr-shifts', '201-locator')
  * @param {string} action - Action: 'read', 'create', 'update', 'delete'
@@ -17,6 +18,12 @@ export const checkPermission = async (req, componentName, action) => {
   if (!userId || !componentName || !action) {
     console.warn('[RBAC] Missing required parameters:', { userId, componentName, action, user: req.user });
     return false;
+  }
+  
+  // Root Admin bypass - supreme access (sysusers.id = 1)
+  const userIdNum = Number(userId);
+  if (userIdNum === ROOT_ADMIN_USER_ID || userId === '1') {
+    return true;
   }
   
   try {
@@ -103,7 +110,13 @@ export const checkPermission = async (req, componentName, action) => {
  * @returns {Promise<boolean>} - true if page accessible, false otherwise
  */
 export const canAccessPage = async (userId, componentName, usertype) => {
-  // Root Admin can access all pages
+  // Root Admin bypass - supreme access (sysusers.id = 1)
+  const userIdNum = Number(userId);
+  if (userIdNum === ROOT_ADMIN_USER_ID || userId === '1') {
+    return true;
+  }
+  
+  // Root Admin can access all pages (usertype.id = 1)
   if (usertype === ROOT_ADMIN_ID || usertype === '1') {
     return true;
   }
@@ -217,8 +230,32 @@ export const requirePermissionOr = (componentName, action1, action2) => {
  * @returns {Promise<Object>} Object with component permissions keyed by componentname, and componentgroups array
  */
 export const getUserPermissions = async (userId, usertype) => {
-  // Root Admin - return wildcard permissions and all componentgroups
-  if (usertype === ROOT_ADMIN_ID) {
+  // Root Admin bypass - supreme access (sysusers.id = 1)
+  const userIdNum = Number(userId);
+  if (userIdNum === ROOT_ADMIN_USER_ID || userId === '1') {
+    try {
+      const pool = getHR201Pool();
+      // Get all unique componentgroups for Root Admin
+      const [groupRows] = await pool.execute(
+        `SELECT DISTINCT componentgroup FROM syscomponents WHERE componentgroup IS NOT NULL AND componentgroup != ''`
+      );
+      const componentgroups = groupRows.map(row => row.componentgroup);
+      
+      return { 
+        '*': { canaccesspage: true, canread: true, cancreate: true, canupdate: true, candelete: true },
+        componentgroups: componentgroups // All groups for Root Admin
+      };
+    } catch (error) {
+      console.error('[RBAC] Error fetching componentgroups for Root Admin:', error);
+      return { 
+        '*': { canaccesspage: true, canread: true, cancreate: true, canupdate: true, candelete: true },
+        componentgroups: []
+      };
+    }
+  }
+  
+  // Root Admin - return wildcard permissions and all componentgroups (usertype.id = 1)
+  if (usertype === ROOT_ADMIN_ID || usertype === '1') {
     try {
       const pool = getHR201Pool();
       // Get all unique componentgroups for Root Admin

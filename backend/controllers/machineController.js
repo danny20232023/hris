@@ -11,7 +11,7 @@ import {
   checkLogExists,
   getUsersFromMachine
 } from '../utils/zktecoSDK.js';
-import { ZKTecoNativeSDK } from '../utils/zktecoSDK_Native.js';
+// ZKTecoNativeSDK imported dynamically to handle edge-js gracefully (Windows-only dependency)
 import ZKLib from 'node-zklib';
 import jwt from 'jsonwebtoken';
 
@@ -2042,8 +2042,19 @@ export const uploadEmployeesToMachine = async (req, res) => {
       });
     }
 
-    // Use native SDK to upload employees
-    const sdk = new ZKTecoNativeSDK(machine.IP, machine.Port || 4370);
+    // Use native SDK to upload employees - with graceful fallback
+    let sdk;
+    try {
+      const { ZKTecoNativeSDK } = await import('../utils/zktecoSDK_Native.js');
+      sdk = new ZKTecoNativeSDK(machine.IP, machine.Port || 4370);
+    } catch (sdkError) {
+      console.warn('⚠️ ZKTeco Native SDK not available:', sdkError.message);
+      return res.status(503).json({
+        success: false,
+        message: 'ZKTeco Native SDK is not available (Windows/COM required). This feature requires Windows and the ZKTeco SDK to be installed.',
+        error: sdkError.message
+      });
+    }
     
     let successCount = 0;
     let errorCount = 0;

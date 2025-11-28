@@ -501,6 +501,9 @@ export const savePDSForCurrentUser = async (req, res) => {
       date_of_birth: req.body?.employee?.date_of_birth,
       birthdate: req.body?.employee?.birthdate,
       place_of_birth: req.body?.employee?.place_of_birth,
+      birthplace: req.body?.employee?.birthplace,
+      sex: req.body?.employee?.sex,
+      gender: req.body?.employee?.gender,
       dtruserid: req.body?.employee?.dtruserid
     });
     
@@ -630,6 +633,10 @@ export const savePDSForCurrentUser = async (req, res) => {
         console.log('🔍 [Backend] employeePayload keys:', Object.keys(employeePayload));
         console.log('🔍 [Backend] employeePayload.date_of_birth:', employeePayload.date_of_birth, 'Type:', typeof employeePayload.date_of_birth);
         console.log('🔍 [Backend] employeePayload.birthdate:', employeePayload.birthdate, 'Type:', typeof employeePayload.birthdate);
+        console.log('🔍 [Backend] employeePayload.place_of_birth:', employeePayload.place_of_birth, 'Type:', typeof employeePayload.place_of_birth);
+        console.log('🔍 [Backend] employeePayload.birthplace:', employeePayload.birthplace, 'Type:', typeof employeePayload.birthplace);
+        console.log('🔍 [Backend] employeePayload.sex:', employeePayload.sex, 'Type:', typeof employeePayload.sex);
+        console.log('🔍 [Backend] employeePayload.gender:', employeePayload.gender, 'Type:', typeof employeePayload.gender);
         console.log('🔍 [Backend] employeePayload has date_of_birth?', 'date_of_birth' in employeePayload);
         console.log('🔍 [Backend] employeePayload has birthdate?', 'birthdate' in employeePayload);
 
@@ -742,8 +749,48 @@ export const savePDSForCurrentUser = async (req, res) => {
             console.log('🔍 [Backend] Normalized birthdate value:', normalizedDate, 'Type:', typeof normalizedDate);
             return normalizedDate;
           })(),
-          birthplace: employeePayload.birthplace ?? employeePayload.place_of_birth ?? existingEmployeeRecord.birthplace ?? '',
-          gender: employeePayload.gender ?? employeePayload.sex ?? existingEmployeeRecord.gender ?? '',
+          birthplace: (() => {
+            // Check if place_of_birth or birthplace is explicitly provided in the payload (even if empty string)
+            const hasPlaceOfBirth = 'place_of_birth' in employeePayload;
+            const hasBirthplace = 'birthplace' in employeePayload;
+            
+            let value;
+            if (hasPlaceOfBirth) {
+              // If place_of_birth is explicitly in payload, use it (even if empty string)
+              value = employeePayload.place_of_birth;
+            } else if (hasBirthplace) {
+              // If birthplace is explicitly in payload, use it (even if empty string)
+              value = employeePayload.birthplace;
+            } else {
+              // If not in payload, use existing value
+              value = existingEmployeeRecord.birthplace;
+            }
+            
+            // Normalize and truncate to VARCHAR(100) limit
+            let result = value !== null && value !== undefined ? String(value).trim() : '';
+            // Truncate to 100 characters to match database column definition VARCHAR(100)
+            if (result.length > 100) {
+              console.warn('⚠️ [Backend] Birthplace exceeds 100 characters, truncating from', result.length, 'to 100');
+              result = result.substring(0, 100);
+            }
+            
+            console.log('🔍 [Backend] Normalized birthplace:', result, 'from:', { 
+              hasPlaceOfBirth, 
+              hasBirthplace,
+              place_of_birth: employeePayload.place_of_birth, 
+              birthplace: employeePayload.birthplace, 
+              existing: existingEmployeeRecord.birthplace,
+              finalValue: result,
+              length: result.length
+            });
+            return result;
+          })(),
+          gender: (() => {
+            const value = employeePayload.gender ?? employeePayload.sex ?? existingEmployeeRecord.gender;
+            const result = value !== null && value !== undefined ? String(value).trim() : '';
+            console.log('🔍 [Backend] Normalized gender:', result, 'from:', { gender: employeePayload.gender, sex: employeePayload.sex, existing: existingEmployeeRecord.gender });
+            return result;
+          })(),
           civil_status: employeePayload.civil_status ?? existingEmployeeRecord.civil_status ?? '',
           height: employeePayload.height ? employeePayload.height.toString().substring(0, 5) : (existingEmployeeRecord.height ? existingEmployeeRecord.height.toString().substring(0, 5) : null),
           weight: employeePayload.weight ? employeePayload.weight.toString().substring(0, 5) : (existingEmployeeRecord.weight ? existingEmployeeRecord.weight.toString().substring(0, 5) : null),
@@ -786,6 +833,21 @@ export const savePDSForCurrentUser = async (req, res) => {
         console.log('💾 [Backend] Birthdate value being saved to database:', birthdateForDb, 'Type:', typeof birthdateForDb);
         console.log('💾 [Backend] Final validation - Is valid YYYY-MM-DD?', birthdateForDb ? /^\d{4}-\d{2}-\d{2}$/.test(birthdateForDb) : 'null');
         console.log('💾 [Backend] Birthdate string representation:', JSON.stringify(birthdateForDb));
+        console.log('💾 [Backend] Normalized birthplace being saved:', normalized.birthplace, 'Type:', typeof normalized.birthplace, 'Length:', normalized.birthplace?.length);
+        console.log('💾 [Backend] Normalized gender being saved:', normalized.gender, 'Type:', typeof normalized.gender);
+        
+        // Verify the SQL parameter order matches the values
+        console.log('💾 [Backend] SQL UPDATE parameters (first 10):', [
+          normalized.dtrbadgenumber, 
+          normalized.surname, 
+          normalized.firstname, 
+          normalized.middlename, 
+          normalized.extension,
+          birthdateForDb, 
+          normalized.birthplace,  // This should be the 7th parameter
+          normalized.gender, 
+          normalized.civil_status
+        ].slice(0, 10));
         
         // Log the SQL that will be executed
         if (birthdateForDb) {
@@ -793,6 +855,14 @@ export const savePDSForCurrentUser = async (req, res) => {
         } else {
           console.log('💾 [Backend] SQL will use: NULL for birthdate');
         }
+        
+        // Ensure birthplace is properly formatted for database (VARCHAR(100))
+        const birthplaceForDb = normalized.birthplace !== null && normalized.birthplace !== undefined 
+          ? String(normalized.birthplace).trim().substring(0, 100) 
+          : '';
+        
+        // Log the exact SQL statement with birthplace
+        console.log('💾 [Backend] About to execute UPDATE/INSERT with birthplace:', JSON.stringify(birthplaceForDb), 'Type:', typeof birthplaceForDb, 'Length:', birthplaceForDb.length);
 
         if (existing.length) {
           // For MySQL DATE type, pass the date string directly in YYYY-MM-DD format
@@ -810,7 +880,7 @@ export const savePDSForCurrentUser = async (req, res) => {
             WHERE objid = ?
           `, [
             normalized.dtrbadgenumber, normalized.surname, normalized.firstname, normalized.middlename, normalized.extension,
-            birthdateForDb, normalized.birthplace, normalized.gender, normalized.civil_status,
+            birthdateForDb, birthplaceForDb, normalized.gender, normalized.civil_status,
             normalized.height, normalized.weight, normalized.blood_type, normalized.gsis, normalized.pagibig, normalized.philhealth, normalized.sss, normalized.tin, normalized.agency_no,
             normalized.citizenship, normalized.dual_citizenship_type, normalized.dual_citizenship_country,
             normalized.telephone, normalized.mobile, normalized.email,
@@ -818,6 +888,13 @@ export const savePDSForCurrentUser = async (req, res) => {
             normalized.mother_surname, normalized.mother_firstname, normalized.mother_middlename,
             employeeObjId
           ]);
+          
+          // Verify the update was successful
+          const [verifyUpdate] = await connection.execute(
+            'SELECT birthplace, gender FROM employees WHERE objid = ?',
+            [employeeObjId]
+          );
+          console.log('✅ [Backend] After UPDATE - Birthplace:', verifyUpdate[0]?.birthplace, 'Gender:', verifyUpdate[0]?.gender);
         } else {
           // For MySQL DATE type, pass the date string directly in YYYY-MM-DD format
           // DATE type doesn't have time component, so no timezone conversion occurs
@@ -834,13 +911,20 @@ export const savePDSForCurrentUser = async (req, res) => {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
           `, [
             employeeObjId, normalized.dtruserid, normalized.dtrbadgenumber, normalized.surname, normalized.firstname, normalized.middlename, normalized.extension,
-            birthdateForDb, normalized.birthplace, normalized.gender, normalized.civil_status,
+            birthdateForDb, birthplaceForDb, normalized.gender, normalized.civil_status,
             normalized.height, normalized.weight, normalized.blood_type, normalized.gsis, normalized.pagibig, normalized.philhealth, normalized.sss, normalized.tin, normalized.agency_no,
             normalized.citizenship, normalized.dual_citizenship_type, normalized.dual_citizenship_country,
             normalized.telephone, normalized.mobile, normalized.email,
             normalized.father_surname, normalized.father_firstname, normalized.father_middlename, normalized.father_extension,
             normalized.mother_surname, normalized.mother_firstname, normalized.mother_middlename
           ]);
+          
+          // Verify the insert was successful
+          const [verifyInsert] = await connection.execute(
+            'SELECT birthplace, gender FROM employees WHERE objid = ?',
+            [employeeObjId]
+          );
+          console.log('✅ [Backend] After INSERT - Birthplace:', verifyInsert[0]?.birthplace, 'Gender:', verifyInsert[0]?.gender);
         }
 
         // Handle media files - process if new media is being uploaded OR if date_accomplished is being updated

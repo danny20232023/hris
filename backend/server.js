@@ -39,6 +39,7 @@ import dtrAssignedShiftsRoutes from './routes/DTRAssignedShiftsRoutes.js'; // DT
 import sysUsersRoutes from './routes/sysUsersRoutes.js'; // System Users Routes
 import dtrHolidaysRoutes from './routes/DTRHolidaysRoutes.js'; // DTR Holidays Routes
 import dtrEmployeeCdoRoutes from './routes/DTREmployeecdoRoutes.js';
+import dtrEmployeeOTroutes from './routes/DTREmployeeOTroutes.js';
 import dtrFixChecktimeRoutes from './routes/DTRFixChecktimeRoutes.js';
 import changeNotificationRoutes from './routes/changeNotificationRoutes.js'; // Change Notification Routes
 import computedDTRRoutes from './routes/computedDTRRoutes.js'; // Computed DTR Routes
@@ -61,6 +62,19 @@ const validateEnvironment = () => {
 
 // Validate environment before proceeding
 validateEnvironment();
+
+// Graceful handling of edge-js errors (Windows-only dependency)
+process.on('unhandledRejection', (reason, promise) => {
+  if (reason && reason.message && (
+    reason.message.includes('edge-js') || 
+    reason.message.includes('edge.js') ||
+    reason.message.includes('ZKTeco Native SDK')
+  )) {
+    console.warn('⚠️  edge-js not available (expected on Linux/containers). Some features may be disabled.');
+    return; // Don't crash on edge-js errors
+  }
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -143,6 +157,7 @@ app.use('/api/dtr-assigned-shifts', dtrAssignedShiftsRoutes); // DTR Assigned Sh
 app.use('/api', sysUsersRoutes); // System Users Routes
 app.use('/api/dtr-holidays', dtrHolidaysRoutes); // DTR Holidays
 app.use('/api/dtr/employee-cdo', dtrEmployeeCdoRoutes);
+app.use('/api/dtr/employee-ot', dtrEmployeeOTroutes);
 app.use('/api/dtr-fix-checktime', dtrFixChecktimeRoutes);
 app.use('/api/change-notifications', changeNotificationRoutes); // Change Notifications
 app.use('/api/computed-dtr', computedDTRRoutes); // Computed DTR Routes

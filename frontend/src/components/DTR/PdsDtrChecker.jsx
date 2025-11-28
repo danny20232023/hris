@@ -2483,12 +2483,17 @@ const PdsDtrChecker = ({ onBack, onSave }) => {
         ...formDataWithoutBirthdate, 
         dtruserid: user?.USERID || formData?.dtruserid,
         date_of_birth: formattedBirthdate || null, // Explicitly set to null if undefined
-        place_of_birth: formData.place_of_birth?.trim() || ''
+        place_of_birth: formData.place_of_birth?.trim() || '',
+        // Explicitly ensure sex/gender fields are included
+        sex: formData.sex || null,
+        gender: formData.sex || null // Backend accepts both sex and gender
       };
       
       console.log('📅 [Frontend] Employee data date_of_birth:', employeeData.date_of_birth, 'Type:', typeof employeeData.date_of_birth);
       console.log('📅 [Frontend] Employee data has birthdate field?', 'birthdate' in employeeData);
       console.log('📅 [Frontend] Employee data has date_of_birth field?', 'date_of_birth' in employeeData);
+      console.log('📅 [Frontend] Employee data sex:', employeeData.sex, 'gender:', employeeData.gender);
+      console.log('📅 [Frontend] Employee data place_of_birth:', employeeData.place_of_birth);
 
       const payload = {
         employee: employeeData,
@@ -2530,6 +2535,8 @@ const PdsDtrChecker = ({ onBack, onSave }) => {
       console.log('📦 [Frontend] Complete employee payload being sent:', {
         date_of_birth: payload.employee.date_of_birth,
         place_of_birth: payload.employee.place_of_birth,
+        sex: payload.employee.sex,
+        gender: payload.employee.gender,
         dtruserid: payload.employee.dtruserid
       });
       

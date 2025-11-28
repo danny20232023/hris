@@ -106,36 +106,38 @@ export const get201EmployeeById = async (req, res) => {
     // Try to find by objid first, then by idno
     const query = `
       SELECT 
-        objid,
-        idno,
-        dtruserid,
-        dtrbadgenumber,
-        surname,
-        firstname,
-        middlename,
-        extension,
-        birthdate,
-        birthplace,
-        gender,
-        civil_status,
-        height,
-        weight,
-        blood_type,
-        gsis,
-        pagibig,
-        philhealth,
-        sss,
-        tin,
-        agency_no,
-        citizenship,
-        dual_citizenship_type,
-        telephone,
-        mobile,
-        email,
-        created_at,
-        updated_at
-      FROM employees
-      WHERE (objid = ? OR idno = ? OR dtruserid = ?)
+        e.objid,
+        e.idno,
+        e.dtruserid,
+        e.dtrbadgenumber,
+        e.surname,
+        e.firstname,
+        e.middlename,
+        e.extension,
+        e.birthdate,
+        e.birthplace,
+        e.gender,
+        e.civil_status,
+        e.height,
+        e.weight,
+        e.blood_type,
+        e.gsis,
+        e.pagibig,
+        e.philhealth,
+        e.sss,
+        e.tin,
+        e.agency_no,
+        e.citizenship,
+        e.dual_citizenship_type,
+        e.telephone,
+        e.mobile,
+        e.email,
+        e.created_at,
+        e.updated_at,
+        em.photo_path
+      FROM employees e
+      LEFT JOIN employees_media em ON e.objid = em.emp_objid
+      WHERE (e.objid = ? OR e.idno = ? OR e.dtruserid = ?)
       LIMIT 1
     `;
     
@@ -149,11 +151,23 @@ export const get201EmployeeById = async (req, res) => {
       });
     }
     
+    const employee = employees[0];
+    
+    // Convert photo_path to base64 if present
+    if (employee.photo_path) {
+      try {
+        employee.photo_path = await readMediaAsBase64(employee.photo_path);
+      } catch (error) {
+        console.warn(`⚠️ Could not read photo for employee ${id}:`, error.message);
+        employee.photo_path = null;
+      }
+    }
+    
     console.log(`✅ Fetched employee ${id} from HR201 'employees' table`);
     
     res.json({
       success: true,
-      data: employees[0],
+      data: employee,
       source: 'HR201 Database - employees table'
     });
     

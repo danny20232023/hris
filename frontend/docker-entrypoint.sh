@@ -13,11 +13,8 @@ else
     echo "⚠️  Warning: /app/dist not found, using existing files in /usr/share/nginx/html"
 fi
 
-# Replace environment variables in nginx config template
-echo "⚙️  Configuring nginx..."
-envsubst '${BACKEND_PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
-echo "✅ Nginx configuration ready"
+# Don't start nginx here - the nginx container will serve the files
+# Just keep the container running by sleeping
+echo "✅ Files copied. Frontend container ready. Nginx container will serve files."
+exec tail -f /dev/null
 
-# Start nginx
-echo "🚀 Starting nginx..."
-exec nginx -g 'daemon off;'

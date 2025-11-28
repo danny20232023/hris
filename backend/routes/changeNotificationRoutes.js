@@ -44,10 +44,13 @@ router.get('/stream', async (req, res) => {
     // If emp_objid not in token, try to get it from sysusers_portal
     if (!emp_objid) {
       const pool = getHR201Pool();
+      // Query using userportalid (primary key column in sysusers_portal)
+      const userportalid = decoded.userportalid || userId;
       const [rows] = await pool.execute(
-        'SELECT emp_objid FROM sysusers_portal WHERE id = ?',
-        [userId]
+        'SELECT emp_objid FROM sysusers_portal WHERE userportalid = ? LIMIT 1',
+        [userportalid]
       );
+      
       if (rows.length > 0) {
         emp_objid = rows[0].emp_objid;
       }
