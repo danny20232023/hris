@@ -23,10 +23,10 @@ FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy nginx config template
-COPY frontend/nginx.conf.template /etc/nginx/conf.d/default.conf.template
+COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template
 
 # Copy entrypoint script
-COPY frontend/docker-entrypoint.sh /docker-entrypoint.sh
+COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
