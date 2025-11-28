@@ -6,14 +6,14 @@ WORKDIR /app
 # Install wget for health checks
 RUN apk add --no-cache wget
 
-# Create node user for security (node user already exists in node:18-alpine)
-# Ensure we have proper permissions
-
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Remove package-lock to force clean install
+RUN rm -f package-lock.json
+
+# Install dependencies without optional deps (edge-js, etc.)
+RUN npm install --omit=optional --only=production
 
 # Copy source files
 COPY --chown=node:node . .
@@ -32,6 +32,10 @@ EXPOSE 5000
 # Set default environment variables (can be overridden via docker-compose)
 ENV NODE_ENV=production
 ENV PORT=5000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:5000/health || exit 1
 
 # Start the application
 CMD ["node", "server.js"]
