@@ -1,47 +1,34 @@
-# Frontend Dockerfile
-# Multi-stage build: Node for building, Nginx for serving
-
 # Stage 1: Build
-FROM node:18-alpine AS builder
+FROM node:18 AS builder
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
+RUN rm -f package-lock.json
+RUN npm install
 
-# Install dependencies
-RUN npm ci
-
-# Copy source files
 COPY . .
 
-# Build arguments for environment variables
 ARG VITE_API_URL
 ARG VITE_UPLOADS_URL
 
-# Set environment variables for build
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_UPLOADS_URL=${VITE_UPLOADS_URL}
 
-# Build the application
 RUN npm run build
 
 # Stage 2: Production
 FROM nginx:alpine
 
-# Copy built files from builder stage to temporary location
-COPY --from=builder /app/dist /app/dist
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy nginx config template
+COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Copy custom nginx configuration (if needed)
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
 
-# No need to expose port 80 - nginx container will serve the files
-# Frontend container only copies files to the shared volume
-
-# Use entrypoint script to copy files to volume (nginx container serves them)
 ENTRYPOINT ["/docker-entrypoint.sh"]
-
