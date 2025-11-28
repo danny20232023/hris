@@ -6,29 +6,9 @@ services:
       dockerfile: Dockerfile
     container_name: hris-backend
     restart: unless-stopped
+    env_file: .env.docker
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    environment:
-      - NODE_ENV=production
-      - PORT=${BACKEND_PORT:-5000}
-      - API_BASE_URL=${API_BASE_URL:-https://${DOMAIN_NAME:-hris.dalaguete.gov.ph}}
-      - UPLOADS_BASE_URL=${UPLOADS_BASE_URL:-https://${DOMAIN_NAME:-hris.dalaguete.gov.ph}/uploads}
-      - CORS_ORIGINS=${CORS_ORIGINS:-https://${DOMAIN_NAME:-hris.dalaguete.gov.ph},https://192.168.8.18:5173}
-      - MEDIA_BASE_DIR=${MEDIA_BASE_DIR:-/app/uploads}
-      - JWT_SECRET=${JWT_SECRET:-dtr-checker-app-secret-key-2024}
-      # Database connections (adjust as needed)
-      - DB_SERVER=${DB_SERVER:-host.docker.internal}
-      - DB_PORT=${DB_PORT:-1433}
-      - DB_DATABASE=${DB_DATABASE:-ZKBio5}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_ENCRYPT=${DB_ENCRYPT:-false}
-      - DB_TRUST_SERVER_CERTIFICATE=${DB_TRUST_SERVER_CERTIFICATE:-true}
-      - HR201_DB_HOST=${HR201_DB_HOST:-host.docker.internal}
-      - HR201_DB_PORT=${HR201_DB_PORT:-3306}
-      - HR201_DB_NAME=${HR201_DB_NAME:-hr201}
-      - HR201_DB_USER=${HR201_DB_USER}
-      - HR201_DB_PASSWORD=${HR201_DB_PASSWORD}
     volumes:
       - backend-uploads:/app/uploads
     networks:
