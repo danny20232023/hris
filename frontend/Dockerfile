@@ -9,8 +9,11 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci
+# Remove lockfile to force fresh install
+RUN rm -f package-lock.json
+
+# Install dependencies WITH optional deps (needed for esbuild and rollup)
+RUN npm install
 
 # Copy source files
 COPY . .
@@ -29,19 +32,16 @@ RUN npm run build
 # Stage 2: Production
 FROM nginx:alpine
 
-# Copy built files from builder stage to temporary location
-COPY --from=builder /app/dist /app/dist
+# Copy built files from builder stage
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Copy custom nginx configuration (if needed)
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
-
 # Expose port 80
 EXPOSE 80
 
-# Use entrypoint script to copy files to volume and start nginx
+# Use entrypoint script
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
