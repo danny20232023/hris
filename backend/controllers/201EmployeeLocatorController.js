@@ -70,9 +70,10 @@ export const listLocators = async (req, res) => {
     const withPhotos = await Promise.all(rows.map(async (r) => {
       // Convert employee photo from file path to base64
       let employeePhoto = null;
-      if (r.employee_photo_path_raw) {
+      if (r.employee_photo_path_raw && r.emp_objid_join) {
         try {
-          employeePhoto = await readMediaAsBase64(r.employee_photo_path_raw);
+          // photo_path is now INT (pathid), requires objid and type
+          employeePhoto = await readMediaAsBase64(r.employee_photo_path_raw, r.emp_objid_join, 'photo');
         } catch {
           employeePhoto = null;
         }

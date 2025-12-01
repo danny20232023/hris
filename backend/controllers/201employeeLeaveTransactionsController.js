@@ -20,6 +20,8 @@ async function generateLeaveNo(connection) {
 }
 
 // Get all employees with transaction summary
+import { readMediaAsBase64 } from '../utils/fileStorage.js';
+
 export const getAllEmployeesWithTransactions = async (req, res) => {
   try {
     const pool = getHR201Pool();
@@ -78,10 +80,34 @@ export const getAllEmployeesWithTransactions = async (req, res) => {
 
     const [rows] = await pool.execute(query, params);
 
-    // Format employee names using centralized utility
-    const formattedRows = rows.map(row => ({
-      ...row,
-      employee_name: formatEmployeeName(row.surname, row.firstname, row.middlename, row.extension)
+    // Format employee names and convert photo_path (pathid) to base64
+    const formattedRows = await Promise.all(rows.map(async (row) => {
+      let photoPathBase64 = null;
+      
+      // Always convert photo_path if it exists (it's now an INT pathid)
+      if (row.photo_path != null && row.emp_objid) {
+        try {
+          // photo_path is now INT (pathid), requires objid and type
+          photoPathBase64 = await readMediaAsBase64(row.photo_path, row.emp_objid, 'photo');
+          if (!photoPathBase64) {
+            console.warn(`⚠️ [getAllEmployeesWithTransactions] Failed to convert photo_path ${row.photo_path} to base64 for employee ${row.emp_objid}`);
+          }
+        } catch (error) {
+          console.warn(`⚠️ [getAllEmployeesWithTransactions] Error converting photo_path ${row.photo_path} for employee ${row.emp_objid}:`, error.message);
+          photoPathBase64 = null;
+        }
+      } else if (row.photo_path != null) {
+        console.warn(`⚠️ [getAllEmployeesWithTransactions] photo_path exists (${row.photo_path}) but emp_objid is missing for employee`);
+      }
+      
+      // Create new object without photo_path, then add the converted value
+      const { photo_path, ...rowWithoutPhoto } = row;
+      
+      return {
+        ...rowWithoutPhoto,
+        employee_name: formatEmployeeName(row.surname, row.firstname, row.middlename, row.extension),
+        photo_path: photoPathBase64 // Always set to base64 string or null, never the original pathid
+      };
     }));
 
     res.json(formattedRows);
@@ -239,12 +265,27 @@ export const getAllLeaveTransactions = async (req, res) => {
         }
       }
       
+      // Convert photo_path (pathid) to base64
+      let photoPathBase64 = null;
+      // elt.emp_objid is the employee object ID
+      const employeeObjId = row.emp_objid;
+      if (row.photo_path && employeeObjId) {
+        try {
+          // photo_path is now INT (pathid), requires objid and type
+          photoPathBase64 = await readMediaAsBase64(row.photo_path, employeeObjId, 'photo');
+        } catch (error) {
+          console.warn(`⚠️ Could not read photo for employee ${employeeObjId}:`, error.message);
+          photoPathBase64 = null;
+        }
+      }
+      
       return {
         ...row,
         status: normalizeLeaveStatus(row.leavestatus),
         employee_name: formatEmployeeName(row.surname, row.firstname, row.middlename, row.extension),
         created_by_employee_name: formatEmployeeName(row.created_by_surname, row.created_by_firstname, row.created_by_middlename),
         approved_by_employee_name: formatEmployeeName(row.approved_by_surname, row.approved_by_firstname, row.approved_by_middlename),
+        photo_path: photoPathBase64, // Replace pathid with base64 data URL
         details,
         vl_balance:
           row.leave_vl_balance ??

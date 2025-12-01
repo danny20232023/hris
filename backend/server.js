@@ -238,13 +238,15 @@ app.use('*', (req, res) => {
     await connectDB();
     await initHR201Database();
     
-    // Initialize media storage paths (non-blocking)
-    initMediaPaths().then(() => {
+    // Initialize media storage paths (after database is ready)
+    try {
+      await initMediaPaths();
       console.log('✅ Media storage paths loaded from database');
-    }).catch((error) => {
+    } catch (error) {
       console.error('❌ Error loading media storage paths:', error);
-      // Don't fail startup if media paths fail to load
-    });
+      // Don't fail startup if media paths fail to load, but warn user
+      console.warn('⚠️  Server will start, but media file saving may not work until folders are configured');
+    }
     
     // Start server only after successful database connections
     app.listen(PORT, '0.0.0.0', () => {

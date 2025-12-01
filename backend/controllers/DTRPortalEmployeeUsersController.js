@@ -60,18 +60,20 @@ const augmentPortalRows = async (rows = []) => {
   const augmented = [];
   for (const row of rows) {
     let photo = null;
-    if (row.employee_photo_path) {
+    if (row.employee_photo_path && row.employee_objid) {
       try {
-        photo = await readMediaAsBase64(row.employee_photo_path);
+        // photo_path is now INT (pathid), requires objid and type
+        photo = await readMediaAsBase64(row.employee_photo_path, row.employee_objid, 'photo');
       } catch (error) {
         console.warn('[PortalEmployeeUsers] Failed to read photo:', row.employee_photo_path, error);
       }
     }
 
     let createdByPhoto = null;
-    if (row.created_by_photo_path) {
+    if (row.created_by_photo_path && row.created_by_objid) {
       try {
-        createdByPhoto = await readMediaAsBase64(row.created_by_photo_path);
+        // photo_path is now INT (pathid), requires objid and type
+        createdByPhoto = await readMediaAsBase64(row.created_by_photo_path, row.created_by_objid, 'photo');
       } catch (error) {
         console.warn('[PortalEmployeeUsers] Failed to read created-by photo:', row.created_by_photo_path, error);
       }
@@ -143,11 +145,13 @@ const listPortalEmployeeUsers = async (req, res) => {
         e.middlename,
         e.dtruserid AS employee_dtruserid,
         em.photo_path AS employee_photo_path,
+        e.objid AS employee_objid,
         su.username AS created_by_username,
         su.photo AS created_by_photo_blob,
         empCreator.surname AS created_by_surname,
         empCreator.firstname AS created_by_firstname,
         empCreator.middlename AS created_by_middlename,
+        empCreator.objid AS created_by_objid,
         emCreator.photo_path AS created_by_photo_path
       FROM sysusers_portal sp
       LEFT JOIN employees e ON e.objid = sp.emp_objid

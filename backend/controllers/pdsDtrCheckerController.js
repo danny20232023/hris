@@ -427,10 +427,12 @@ export const getPDSForCurrentUser = async (req, res) => {
         }
       };
 
+      // Read media files - columns are now INT, so paths are always pathid (numbers)
+      const employeeObjId = employee.objid; // Define employeeObjId for use in readMediaAsBase64
       const mappedMedia = media[0] ? {
-        signature: media[0].signature_path ? await readMediaAsBase64(media[0].signature_path) : '',
-        photo: media[0].photo_path ? await readMediaAsBase64(media[0].photo_path) : '',
-        thumb: media[0].thumb_path ? await readMediaAsBase64(media[0].thumb_path) : '',
+        signature: media[0].signature_path ? await readMediaAsBase64(media[0].signature_path, employeeObjId, 'signature') : '',
+        photo: media[0].photo_path ? await readMediaAsBase64(media[0].photo_path, employeeObjId, 'photo') : '',
+        thumb: media[0].thumb_path ? await readMediaAsBase64(media[0].thumb_path, employeeObjId, 'thumb') : '',
         date_accomplished: formatDateYMD(media[0].date_accomplished || '')
       } : {};
       
@@ -935,6 +937,23 @@ export const savePDSForCurrentUser = async (req, res) => {
         const isValidDate = date_accomplished && typeof date_accomplished === 'string' && date_accomplished.trim() !== '';
 
         if (hasNewMedia || hasDateAccomplished) {
+          // Check if media folders are configured before attempting to save
+          if (hasNewMedia) {
+            const { getMediaPathId } = await import('../config/uploadsConfig.js');
+            const photoPathId = getMediaPathId('photo');
+            const signaturePathId = getMediaPathId('signature');
+            const thumbPathId = getMediaPathId('thumb');
+            
+            const missingFolders = [];
+            if (photo_data && !photoPathId) missingFolders.push('photo');
+            if (signature_data && !signaturePathId) missingFolders.push('signature');
+            if (thumbmark_data && !thumbPathId) missingFolders.push('thumb');
+            
+            if (missingFolders.length > 0) {
+              throw new Error(`Media folders not configured. Please configure the following folders in Media Storage: ${missingFolders.join(', ')}`);
+            }
+          }
+          
           try {
             // Decode base64 data URLs to binary buffers
             const decode = (data) => {
@@ -961,28 +980,64 @@ export const savePDSForCurrentUser = async (req, res) => {
             if (sigBuf) {
               // Delete old signature if exists and new one is being uploaded
               if (existingMedia.length > 0 && existingMedia[0].signature_path) {
-                await deleteMediaFile(existingMedia[0].signature_path);
+                // Columns are now INT, so signature_path is always a number (pathid)
+                await deleteMediaFile(
+                  existingMedia[0].signature_path, 
+                  employeeObjId, 
+                  'signature'
+                );
               }
-              const signaturePath = await saveMediaFile(sigBuf, 'signature', employeeObjId);
-              mediaFiles.signature_path = signaturePath;
+              const signatureResult = await saveMediaFile(sigBuf, 'signature', employeeObjId);
+              // Extract pathid - should always be an object with pathid property
+              if (typeof signatureResult === 'object' && signatureResult.pathid) {
+                mediaFiles.signature_path = signatureResult.pathid;
+                console.log(`✅ [savePDSForCurrentUser] Signature saved with pathid: ${signatureResult.pathid}`);
+              } else {
+                console.error(`❌ [savePDSForCurrentUser] Signature save failed - invalid result:`, signatureResult);
+                throw new Error('Failed to save signature: pathid not returned');
+              }
             }
 
             if (photoBuf) {
               // Delete old photo if exists and new one is being uploaded
               if (existingMedia.length > 0 && existingMedia[0].photo_path) {
-                await deleteMediaFile(existingMedia[0].photo_path);
+                // Columns are now INT, so photo_path is always a number (pathid)
+                await deleteMediaFile(
+                  existingMedia[0].photo_path, 
+                  employeeObjId, 
+                  'photo'
+                );
               }
-              const photoPath = await saveMediaFile(photoBuf, 'photo', employeeObjId);
-              mediaFiles.photo_path = photoPath;
+              const photoResult = await saveMediaFile(photoBuf, 'photo', employeeObjId);
+              // Extract pathid - should always be an object with pathid property
+              if (typeof photoResult === 'object' && photoResult.pathid) {
+                mediaFiles.photo_path = photoResult.pathid;
+                console.log(`✅ [savePDSForCurrentUser] Photo saved with pathid: ${photoResult.pathid}`);
+              } else {
+                console.error(`❌ [savePDSForCurrentUser] Photo save failed - invalid result:`, photoResult);
+                throw new Error('Failed to save photo: pathid not returned');
+              }
             }
 
             if (thumbBuf) {
               // Delete old thumbmark if exists and new one is being uploaded
               if (existingMedia.length > 0 && existingMedia[0].thumb_path) {
-                await deleteMediaFile(existingMedia[0].thumb_path);
+                // Columns are now INT, so thumb_path is always a number (pathid)
+                await deleteMediaFile(
+                  existingMedia[0].thumb_path, 
+                  employeeObjId, 
+                  'thumb'
+                );
               }
-              const thumbPath = await saveMediaFile(thumbBuf, 'thumb', employeeObjId);
-              mediaFiles.thumb_path = thumbPath;
+              const thumbResult = await saveMediaFile(thumbBuf, 'thumb', employeeObjId);
+              // Extract pathid - should always be an object with pathid property
+              if (typeof thumbResult === 'object' && thumbResult.pathid) {
+                mediaFiles.thumb_path = thumbResult.pathid;
+                console.log(`✅ [savePDSForCurrentUser] Thumb saved with pathid: ${thumbResult.pathid}`);
+              } else {
+                console.error(`❌ [savePDSForCurrentUser] Thumb save failed - invalid result:`, thumbResult);
+                throw new Error('Failed to save thumb: pathid not returned');
+              }
             }
 
           // Save media record - ensure only 1 record per user
@@ -1055,7 +1110,9 @@ export const savePDSForCurrentUser = async (req, res) => {
           }
           } catch (mediaError) {
             console.error('❌ Error processing media:', mediaError);
-            console.log('📝 Skipping media processing due to error');
+            // Re-throw the error so it's not silently ignored
+            // This ensures the transaction is rolled back and user sees the error
+            throw mediaError;
           }
         }
 

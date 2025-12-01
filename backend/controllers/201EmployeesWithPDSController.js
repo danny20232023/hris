@@ -78,7 +78,14 @@ export const list = async (req, res) => {
     const [rows] = await pool.execute(sql);
     const data = await Promise.all(rows.map(async (r) => {
       let photo = null;
-      if (r.photo_path) { try { photo = await readMediaAsBase64(r.photo_path); } catch { photo = null; } }
+      if (r.photo_path) { 
+        try { 
+          // photo_path is now INT (pathid), requires objid and type
+          photo = await readMediaAsBase64(r.photo_path, r.objid, 'photo'); 
+        } catch { 
+          photo = null; 
+        } 
+      }
       return {
         objid: r.objid,
         fullname: formatEmployeeName(r.surname, r.firstname, r.middlename, r.extension),

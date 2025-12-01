@@ -161,9 +161,10 @@ const mergePortalData = async (employees = []) => {
         const normalized = normalizePortalRow(rows[0]);
         let photoBase64 = null;
 
-        if (normalized.photo_path) {
+        if (normalized.photo_path && normalized.emp_objid) {
           try {
-            photoBase64 = await readMediaAsBase64(normalized.photo_path);
+            // photo_path is now INT (pathid), requires emp_objid and type
+            photoBase64 = await readMediaAsBase64(normalized.photo_path, normalized.emp_objid, 'photo');
           } catch (photoError) {
             console.warn('Warning: unable to read portal photo for', normalized.dtruserid, photoError.message);
           }
@@ -1674,9 +1675,10 @@ const getPortalEmployeeProfile = async (req, res) => {
     const fullName = [lastName, firstName].filter(Boolean).join(', ');
 
     let photo = null;
-    if (match.photo_path) {
+    if (match.photo_path && match.objid) {
       try {
-        photo = await readMediaAsBase64(match.photo_path);
+        // photo_path is now INT (pathid), requires objid and type
+        photo = await readMediaAsBase64(match.photo_path, match.objid, 'photo');
       } catch (error) {
         console.warn('Unable to read employee photo:', error);
         photo = null;

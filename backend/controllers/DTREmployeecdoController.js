@@ -122,7 +122,8 @@ export const listCdo = async (req, res) => {
   let photo = null;
         if (emp.photo_path) {
     try {
-            photo = await readMediaAsBase64(emp.photo_path);
+            // photo_path is now INT (pathid), requires objid and type
+            photo = await readMediaAsBase64(emp.photo_path, emp.objid, 'photo');
     } catch (error) {
             console.warn('Failed to read employee photo:', emp.objid, error.message);
       photo = null;

@@ -60,13 +60,14 @@ export const get201Employees = async (req, res) => {
     const [employees] = await pool.execute(query);
 
     // Convert photo_path files to base64 data URLs when present and format names
+    // Columns are now INT, so photo_path is always pathid (number)
     for (const emp of employees) {
       if (emp.photo_path) {
         try {
-          emp.photo_path = await readMediaAsBase64(emp.photo_path);
+          // photo_path is now always a pathid (integer), so pass objid and type for resolution
+          emp.photo_path = await readMediaAsBase64(emp.photo_path, emp.objid, 'photo');
         } catch (e) {
-          // If conversion fails, keep original path or null
-          // Prefer null to avoid broken image requests in the frontend
+          // If conversion fails, set to null to avoid broken image requests in the frontend
           emp.photo_path = null;
         }
       }
@@ -153,10 +154,10 @@ export const get201EmployeeById = async (req, res) => {
     
     const employee = employees[0];
     
-    // Convert photo_path to base64 if present
+    // Convert photo_path to base64 if present - column is now INT, so it's always pathid (number)
     if (employee.photo_path) {
       try {
-        employee.photo_path = await readMediaAsBase64(employee.photo_path);
+        employee.photo_path = await readMediaAsBase64(employee.photo_path, employee.objid, 'photo');
       } catch (error) {
         console.warn(`⚠️ Could not read photo for employee ${id}:`, error.message);
         employee.photo_path = null;
@@ -1602,6 +1603,23 @@ export const savePDS = async (req, res) => {
       const hasDateAccomplished = employee.date_accomplished && employee.date_accomplished.trim() !== '';
 
       if (hasNewMedia || hasDateAccomplished) {
+        // Check if media folders are configured before attempting to save
+        if (hasNewMedia) {
+          const { getMediaPathId } = await import('../config/uploadsConfig.js');
+          const photoPathId = getMediaPathId('photo');
+          const signaturePathId = getMediaPathId('signature');
+          const thumbPathId = getMediaPathId('thumb');
+          
+          const missingFolders = [];
+          if (photo_data && !photoPathId) missingFolders.push('photo');
+          if (signature_data && !signaturePathId) missingFolders.push('signature');
+          if (thumbmark_data && !thumbPathId) missingFolders.push('thumb');
+          
+          if (missingFolders.length > 0) {
+            throw new Error(`Media folders not configured. Please configure the following folders in Media Storage: ${missingFolders.join(', ')}`);
+          }
+        }
+        
         try {
           const decode = (data) => {
             if (!data) return null;
@@ -1691,8 +1709,15 @@ export const savePDS = async (req, res) => {
 
           if (processed.signature) {
             try {
-              filePaths.signature = await saveMediaFile(processed.signature.buffer, 'signature', employeeObjId);
-              console.log(`✅ Signature saved to: ${filePaths.signature}`);
+              const signatureResult = await saveMediaFile(processed.signature.buffer, 'signature', employeeObjId);
+              // Extract pathid - should always be an object with pathid property
+              if (typeof signatureResult === 'object' && signatureResult.pathid) {
+                filePaths.signature = signatureResult.pathid;
+                console.log(`✅ [savePDS] Signature saved with pathid: ${signatureResult.pathid}`);
+              } else {
+                console.error(`❌ [savePDS] Signature save failed - invalid result:`, signatureResult);
+                throw new Error('Failed to save signature: pathid not returned');
+              }
             } catch (error) {
               console.error('❌ Error saving signature:', error);
               filePaths.signature = null;
@@ -1700,8 +1725,15 @@ export const savePDS = async (req, res) => {
           }
           if (processed.photo) {
             try {
-              filePaths.photo = await saveMediaFile(processed.photo.buffer, 'photo', employeeObjId);
-              console.log(`✅ Photo saved to: ${filePaths.photo}`);
+              const photoResult = await saveMediaFile(processed.photo.buffer, 'photo', employeeObjId);
+              // Extract pathid - should always be an object with pathid property
+              if (typeof photoResult === 'object' && photoResult.pathid) {
+                filePaths.photo = photoResult.pathid;
+                console.log(`✅ [savePDS] Photo saved with pathid: ${photoResult.pathid}`);
+              } else {
+                console.error(`❌ [savePDS] Photo save failed - invalid result:`, photoResult);
+                throw new Error('Failed to save photo: pathid not returned');
+              }
             } catch (error) {
               console.error('❌ Error saving photo:', error);
               filePaths.photo = null;
@@ -1709,8 +1741,15 @@ export const savePDS = async (req, res) => {
           }
           if (processed.thumb) {
             try {
-              filePaths.thumb = await saveMediaFile(processed.thumb.buffer, 'thumb', employeeObjId);
-              console.log(`✅ Thumb saved to: ${filePaths.thumb}`);
+              const thumbResult = await saveMediaFile(processed.thumb.buffer, 'thumb', employeeObjId);
+              // Extract pathid - should always be an object with pathid property
+              if (typeof thumbResult === 'object' && thumbResult.pathid) {
+                filePaths.thumb = thumbResult.pathid;
+                console.log(`✅ [savePDS] Thumb saved with pathid: ${thumbResult.pathid}`);
+              } else {
+                console.error(`❌ [savePDS] Thumb save failed - invalid result:`, thumbResult);
+                throw new Error('Failed to save thumb: pathid not returned');
+              }
             } catch (error) {
               console.error('❌ Error saving thumb:', error);
               filePaths.thumb = null;
@@ -1729,17 +1768,30 @@ export const savePDS = async (req, res) => {
             console.log(`📝 Updating existing media record for employee: ${employeeObjId}`);
             
             // Only delete old files if new ones are actually provided
+            // Columns are now INT, so paths are always pathid (numbers)
             if (filePaths.signature !== null && mediaExisting[0].signature_path && mediaExisting[0].signature_path !== filePaths.signature) {
-              console.log(`🗑️ Deleting old signature file: ${mediaExisting[0].signature_path}`);
-              await deleteMediaFile(mediaExisting[0].signature_path);
+              console.log(`🗑️ Deleting old signature file (pathid: ${mediaExisting[0].signature_path})`);
+              await deleteMediaFile(
+                mediaExisting[0].signature_path, 
+                employeeObjId, 
+                'signature'
+              );
             }
             if (filePaths.photo !== null && mediaExisting[0].photo_path && mediaExisting[0].photo_path !== filePaths.photo) {
-              console.log(`🗑️ Deleting old photo file: ${mediaExisting[0].photo_path}`);
-              await deleteMediaFile(mediaExisting[0].photo_path);
+              console.log(`🗑️ Deleting old photo file (pathid: ${mediaExisting[0].photo_path})`);
+              await deleteMediaFile(
+                mediaExisting[0].photo_path, 
+                employeeObjId, 
+                'photo'
+              );
             }
             if (filePaths.thumb !== null && mediaExisting[0].thumb_path && mediaExisting[0].thumb_path !== filePaths.thumb) {
-              console.log(`🗑️ Deleting old thumb file: ${mediaExisting[0].thumb_path}`);
-              await deleteMediaFile(mediaExisting[0].thumb_path);
+              console.log(`🗑️ Deleting old thumb file (pathid: ${mediaExisting[0].thumb_path})`);
+              await deleteMediaFile(
+                mediaExisting[0].thumb_path, 
+                employeeObjId, 
+                'thumb'
+              );
             }
 
             // Update with new paths (only if provided) or keep existing paths
@@ -1780,7 +1832,9 @@ export const savePDS = async (req, res) => {
           console.log('✅ Media files saved successfully');
         } catch (mediaError) {
           console.error('❌ Error processing media:', mediaError);
-          console.log('📝 Skipping media processing due to error');
+          // Re-throw the error so it's not silently ignored
+          // This ensures the transaction is rolled back and user sees the error
+          throw mediaError;
         }
       }
 
@@ -2223,10 +2277,10 @@ export const getPDS = async (req, res) => {
       if (mediaResult.length > 0) {
         const mediaData = mediaResult[0];
         
-        // Read files and convert to base64
-        const signatureBase64 = mediaData.signature_path ? await readMediaAsBase64(mediaData.signature_path) : null;
-        const photoBase64 = mediaData.photo_path ? await readMediaAsBase64(mediaData.photo_path) : null;
-        const thumbBase64 = mediaData.thumb_path ? await readMediaAsBase64(mediaData.thumb_path) : null;
+        // Read files and convert to base64 - columns are now INT, so paths are always pathid (numbers)
+        const signatureBase64 = mediaData.signature_path ? await readMediaAsBase64(mediaData.signature_path, employee.objid, 'signature') : null;
+        const photoBase64 = mediaData.photo_path ? await readMediaAsBase64(mediaData.photo_path, employee.objid, 'photo') : null;
+        const thumbBase64 = mediaData.thumb_path ? await readMediaAsBase64(mediaData.thumb_path, employee.objid, 'thumb') : null;
 
         // Ensure date_accomplished is a yyyy-mm-dd string for the date input
         const formatDateYMD = (val) => {

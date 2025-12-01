@@ -24,6 +24,9 @@ RUN npm ci --only=production
 # Copy source files
 COPY --chown=node:node . .
 
+# Make entrypoint script executable (before switching to node user)
+RUN chmod +x /app/scripts/docker-entrypoint.sh
+
 # Create uploads directory with proper permissions
 RUN mkdir -p uploads/photo uploads/signature uploads/thumb uploads/education \
     uploads/csc uploads/workcert uploads/certificate uploads/leave && \

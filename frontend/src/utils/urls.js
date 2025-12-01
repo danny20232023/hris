@@ -46,45 +46,60 @@ export const getUploadsUrl = (path) => {
 /**
  * Get photo URL - handles different photo path formats
  * This is a centralized function to replace all getPhotoUrl implementations
- * @param {string} photoPath - Photo path in various formats
- * @returns {string|null} Full photo URL or null if no path provided
+ * @param {string|number} photoPath - Photo path in various formats, or pathid (integer), or base64 data URL
+ * @returns {string|null} Full photo URL or base64 data URL or null if no path provided
  */
 export const getPhotoUrl = (photoPath) => {
-  if (!photoPath) {
+  if (!photoPath && photoPath !== 0) {
     return null;
   }
   
+  // Handle pathid (integer) - backend should convert this to base64, but if we receive it, return null
+  // The backend should be sending base64 data URLs instead of pathids
+  if (typeof photoPath === 'number') {
+    console.warn('⚠️ Received pathid (number) instead of photo path. Backend should convert to base64.');
+    return null;
+  }
+  
+  // Convert to string if not already
+  const photoPathStr = String(photoPath);
+  
+  // If it's a base64 data URL, return as is
+  if (photoPathStr.startsWith('data:image/')) {
+    return photoPathStr;
+  }
+  
   // If already a full URL, return as is
-  if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) {
-    return photoPath;
+  if (photoPathStr.startsWith('http://') || photoPathStr.startsWith('https://')) {
+    return photoPathStr;
   }
   
   // If absolute Windows path, extract filename and construct URL
-  if (photoPath.includes('\\') && (photoPath.startsWith('C:') || photoPath.startsWith('D:') || photoPath.startsWith('E:'))) {
-    const pathParts = photoPath.split('\\');
+  if (photoPathStr.includes('\\') && (photoPathStr.startsWith('C:') || photoPathStr.startsWith('D:') || photoPathStr.startsWith('E:'))) {
+    const pathParts = photoPathStr.split('\\');
     const filename = pathParts[pathParts.length - 1];
     return getUploadsUrl(`photo/${filename}`);
   }
   
   // If starts with uploads/, remove the prefix and construct URL
-  if (photoPath.startsWith('uploads/')) {
-    const relativePath = photoPath.replace('uploads/', '');
+  if (photoPathStr.startsWith('uploads/')) {
+    const relativePath = photoPathStr.replace('uploads/', '');
     return getUploadsUrl(relativePath);
   }
   
   // If starts with /uploads/, remove the prefix and construct URL
-  if (photoPath.startsWith('/uploads/')) {
-    const relativePath = photoPath.replace('/uploads/', '');
+  if (photoPathStr.startsWith('/uploads/')) {
+    const relativePath = photoPathStr.replace('/uploads/', '');
     return getUploadsUrl(relativePath);
   }
   
   // Otherwise, assume it's a filename or relative path and prepend photo/ if needed
-  if (photoPath.includes('/')) {
+  if (photoPathStr.includes('/')) {
     // Already has a path structure
-    return getUploadsUrl(photoPath);
+    return getUploadsUrl(photoPathStr);
   } else {
     // Just a filename, assume it's in photo directory
-    return getUploadsUrl(`photo/${photoPath}`);
+    return getUploadsUrl(`photo/${photoPathStr}`);
   }
 };
 

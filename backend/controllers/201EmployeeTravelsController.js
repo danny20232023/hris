@@ -67,7 +67,8 @@ const mapTransactionRows = async (rows) => {
           createdByEmployeeName = fullname || createdByEmployeeName;
           if (creator.photo_path) {
             try {
-              createdByPhoto = await readMediaAsBase64(creator.photo_path);
+              // photo_path is now INT (pathid), requires objid and type
+              createdByPhoto = await readMediaAsBase64(creator.photo_path, creator.objid, 'photo');
             } catch (e) {
               console.warn('Failed to load portal creator photo:', e.message);
             }
@@ -103,7 +104,8 @@ const mapTransactionRows = async (rows) => {
             approvedByEmployeeName = fullname || approvedByEmployeeName;
             if (!approvedByPhoto && approver.photo_path) {
               try {
-                approvedByPhoto = await readMediaAsBase64(approver.photo_path);
+                // photo_path is now INT (pathid), requires objid and type
+                approvedByPhoto = await readMediaAsBase64(approver.photo_path, approver.objid, 'photo');
               } catch (e) {
                 console.warn('Failed to load approver photo:', e.message);
               }
@@ -207,7 +209,12 @@ export const listEmployeesWithTravel = async (req, res) => {
     const data = await Promise.all(rows.map(async (r) => {
       let photo = null;
       if (r.photo_path) {
-        try { photo = await readMediaAsBase64(r.photo_path); } catch { photo = null; }
+        try { 
+          // photo_path is now INT (pathid), requires objid and type
+          photo = await readMediaAsBase64(r.photo_path, r.objid, 'photo'); 
+        } catch { 
+          photo = null; 
+        }
       }
       return {
         objid: r.objid,
@@ -255,7 +262,8 @@ export const listTravelLiaisons = async (req, res) => {
       let photo = null;
       if (row.photo_path) {
         try {
-          photo = await readMediaAsBase64(row.photo_path);
+          // photo_path is now INT (pathid), requires objid and type
+          photo = await readMediaAsBase64(row.photo_path, row.objid, 'photo');
         } catch (err) {
           photo = null;
         }

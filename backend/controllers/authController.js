@@ -331,9 +331,10 @@ export const login = async (req, res) => {
         trimmedUsername;
 
       let photoData = null;
-      if (portalRow.photo_path) {
+      if (portalRow.photo_path && portalRow.emp_objid) {
         try {
-          photoData = await readMediaAsBase64(portalRow.photo_path);
+          // photo_path is now INT (pathid), requires emp_objid and type
+          photoData = await readMediaAsBase64(portalRow.photo_path, portalRow.emp_objid, 'photo');
         } catch (photoError) {
           console.warn('Unable to read portal user photo:', photoError.message);
           photoData = null;
@@ -529,9 +530,10 @@ export const createPortalSessionFromAdmin = async (req, res) => {
       portalRow.username;
 
     let photoData = null;
-    if (portalRow.photo_path) {
+    if (portalRow.photo_path && empObjId) {
       try {
-        photoData = await readMediaAsBase64(portalRow.photo_path);
+        // photo_path is now INT (pathid), requires emp_objid and type
+        photoData = await readMediaAsBase64(portalRow.photo_path, empObjId, 'photo');
       } catch (photoError) {
         console.warn('Unable to load portal user photo for bridge session:', photoError.message);
       }

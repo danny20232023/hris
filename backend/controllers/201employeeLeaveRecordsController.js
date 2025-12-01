@@ -1,6 +1,7 @@
 import { getHR201Pool } from '../config/hr201Database.js';
 import { v4 as uuidv4 } from 'uuid';
 import { formatEmployeeName } from '../utils/employeenameFormatter.js';
+import { readMediaAsBase64 } from '../utils/fileStorage.js';
 
 // Get all employees with their leave records
 export const getAllEmployeesWithLeaveRecords = async (req, res) => {
@@ -52,24 +53,36 @@ export const getAllEmployeesWithLeaveRecords = async (req, res) => {
     
     // Format the data for frontend with photo conversion
     const employees = await Promise.all(rows.map(async (row) => {
+      // Convert updated_by_photo_blob to base64
       let updatedByPhoto = null;
       if (row.updated_by_photo_blob) {
         try {
           const buffer = Buffer.isBuffer(row.updated_by_photo_blob) ? row.updated_by_photo_blob : Buffer.from(row.updated_by_photo_blob);
-          if (buffer.length === 0) {
-            console.log('⚠️ [LEAVE RECORDS] Updated by photo blob is empty for employee:', row.emp_objid);
-            updatedByPhoto = null;
-          } else {
+          if (buffer.length > 0) {
             const base64 = buffer.toString('base64');
             updatedByPhoto = `data:image/png;base64,${base64}`;
-            console.log('✅ [LEAVE RECORDS] Updated by photo converted successfully for employee:', row.emp_objid, 'Size:', buffer.length);
           }
         } catch (e) {
           console.error('❌ [LEAVE RECORDS] Error converting updated by photo blob:', e.message, 'Employee:', row.emp_objid);
           updatedByPhoto = null;
         }
-      } else {
-        console.log('⚠️ [LEAVE RECORDS] No updated_by_photo_blob found for employee:', row.emp_objid, 'updatedby:', row.updatedby);
+      }
+      // Only log warning if updatedby exists but photo blob is missing (actual issue)
+      // Don't log if updatedby is null (expected - record was never updated)
+      else if (row.updatedby) {
+        console.warn('⚠️ [LEAVE RECORDS] updatedby exists but no photo blob found for employee:', row.emp_objid, 'updatedby:', row.updatedby);
+      }
+      
+      // Convert photo_path (pathid) to base64
+      let photoPathBase64 = null;
+      if (row.photo_path != null && row.emp_objid) {
+        try {
+          // photo_path is now INT (pathid), requires objid and type
+          photoPathBase64 = await readMediaAsBase64(row.photo_path, row.emp_objid, 'photo');
+        } catch (error) {
+          console.warn(`⚠️ [LEAVE RECORDS] Could not read photo for employee ${row.emp_objid}:`, error.message);
+          photoPathBase64 = null;
+        }
       }
       
       return {
@@ -85,7 +98,7 @@ export const getAllEmployeesWithLeaveRecords = async (req, res) => {
         balance_sl: row.balance_sl || 0,
         has_leave_record: !!row.leave_objid,
         leave_objid: row.leave_objid,
-        photo_path: row.photo_path,
+        photo_path: photoPathBase64, // Replace pathid with base64 data URL
         leave_updated_at: row.leave_updated_at,
         updatedby: row.updatedby || null,
         updated_by_username: row.updated_by_username || null,

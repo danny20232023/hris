@@ -6,9 +6,10 @@ import { formatEmployeeName } from '../utils/employeenameFormatter.js';
 // Helper to map row with optional base64 photos (employee and creator)
 async function mapDesignationRow(row) {
   let employeePhoto = null;
-  if (row.photo_path) {
+  if (row.photo_path && row.employee_objid) {
     try {
-      employeePhoto = await readMediaAsBase64(row.photo_path);
+      // photo_path is now INT (pathid), requires objid and type
+      employeePhoto = await readMediaAsBase64(row.photo_path, row.employee_objid, 'photo');
     } catch (e) {
       employeePhoto = null;
     }

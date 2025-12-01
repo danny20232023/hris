@@ -1,6 +1,7 @@
 import { getHR201Pool } from '../config/hr201Database.js';
 import { changeNotificationService } from '../services/changeNotificationService.js';
 import { formatEmployeeName } from '../utils/employeenameFormatter.js';
+import { readMediaAsBase64 } from '../utils/fileStorage.js';
 
 // Helper function to ensure the table exists
 const ensureTableExists = async (pool) => {
@@ -100,13 +101,26 @@ const convertPhotoBlob = (photoBlob) => {
 };
 
 // Helper function to process a row and convert photo blobs
-const processRow = (row) => {
+const processRow = async (row) => {
   const processedRow = { ...row };
   
   // Format employee names
   processedRow.employeeName = formatEmployeeName(row.LASTNAME, row.FIRSTNAME, row.middlename);
   processedRow.created_by_employee_name = formatEmployeeName(row.created_by_surname, row.created_by_firstname, row.created_by_middlename);
   processedRow.approved_by_employee_name = formatEmployeeName(row.approved_by_surname, row.approved_by_firstname, row.approved_by_middlename);
+  
+  // Convert employee photo_path (pathid) to base64
+  if (row.PHOTOPATH && row.emp_objid) {
+    try {
+      const photoBase64 = await readMediaAsBase64(row.PHOTOPATH, row.emp_objid, 'photo');
+      processedRow.PHOTOPATH = photoBase64;
+    } catch (error) {
+      console.warn(`⚠️ [FIX LOGS] Could not convert employee photo (pathid: ${row.PHOTOPATH}):`, error.message);
+      processedRow.PHOTOPATH = null;
+    }
+  } else {
+    processedRow.PHOTOPATH = null;
+  }
   
   processedRow.created_by_photo_path = convertPhotoBlob(row.created_by_photo_blob);
   processedRow.approved_by_photo_path = convertPhotoBlob(row.approved_by_photo_blob);
@@ -163,8 +177,8 @@ export const listFixChecktimes = async (req, res) => {
 
     const [rows] = await pool.execute(query, params);
     
-    // Convert sysuser photo blobs to base64 data URLs
-    const processedRows = rows.map(processRow);
+    // Convert photo paths (pathids) and sysuser photo blobs to base64 data URLs
+    const processedRows = await Promise.all(rows.map(processRow));
     
     res.json({ success: true, data: processedRows });
   } catch (error) {
@@ -182,7 +196,7 @@ export const getFixChecktime = async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Fix log not found' });
     }
-    const processedRow = processRow(rows[0]);
+    const processedRow = await processRow(rows[0]);
     res.json({ success: true, data: processedRow });
   } catch (error) {
     console.error('Error fetching fix checktime record:', error);
@@ -252,7 +266,7 @@ export const createFixChecktime = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Created fix log not found' });
     }
     
-    const processedRow = processRow(rows[0]);
+    const processedRow = await processRow(rows[0]);
     
     // Notify employee about new fix log record
     console.log(`📢 [FIX LOGS] Notifying employee ${emp_objid} (type: ${typeof emp_objid}) about created fix log ${newId}`);
@@ -316,7 +330,7 @@ export const updateFixChecktime = async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Fix log not found' });
     }
-    const processedRow = processRow(rows[0]);
+    const processedRow = await processRow(rows[0]);
     const emp_objid = rows[0].emp_objid;
     
     // Notify employee about updated fix log record
