@@ -1,6 +1,186 @@
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import { getMediaDirectory, getMediaExtension, generateMediaRelativePath, getMimeType } from '../config/uploadsConfig.js';
+
+/**
+ * Check if running in Docker container
+ * @returns {boolean}
+ */
+function isRunningInDocker() {
+  // Check for Docker environment file (most reliable method)
+  try {
+    if (fsSync.existsSync('/.dockerenv')) {
+      return true;
+    }
+  } catch {
+    // File system check failed, continue with other methods
+  }
+  
+  // Check environment variable
+  if (process.env.DOCKER_CONTAINER === 'true' || process.env.DOCKER_CONTAINER === '1') {
+    return true;
+  }
+  
+  // Check if process.cwd() is a Linux absolute path (starts with /) 
+  // and we're not on Windows platform
+  const cwd = process.cwd();
+  if (process.platform !== 'win32' && cwd.startsWith('/')) {
+    // Likely in Docker/Linux environment
+    return true;
+  }
+  
+  // If we're on Windows but cwd starts with /, we're likely in WSL or Docker
+  if (process.platform === 'win32' && cwd.startsWith('/')) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Convert Windows absolute path to Docker container path
+ * Handles paths like C:\HRIS\backend\uploads\photo\filename.jpg
+ * and converts them to /app/uploads/photo/filename.jpg
+ * @param {string} filePath - Windows absolute path
+ * @returns {string|null} - Docker container path or null if cannot convert
+ */
+function convertWindowsPathToDockerPath(filePath) {
+  if (!filePath) return null;
+  
+  // Check if it's a Windows absolute path (starts with drive letter like C:\)
+  const isWindowsPath = /^[A-Za-z]:\\/.test(filePath);
+  if (!isWindowsPath) return null;
+  
+  // Extract path after drive letter and normalize to forward slashes
+  const pathAfterDrive = filePath.replace(/^[A-Za-z]:\\/, '').replace(/\\/g, '/');
+  
+  // Find "uploads" directory in the path
+  const uploadsIndex = pathAfterDrive.toLowerCase().indexOf('uploads');
+  if (uploadsIndex === -1) {
+    // Try to find media type directories directly
+    const mediaTypes = ['photo', 'signature', 'thumb', 'education', 'csc', 'workcert', 'certificate', 'leave'];
+    for (const mediaType of mediaTypes) {
+      const typeIndex = pathAfterDrive.toLowerCase().indexOf(mediaType);
+      if (typeIndex !== -1) {
+        // Extract filename
+        const parts = pathAfterDrive.split('/');
+        const filename = parts[parts.length - 1];
+        try {
+          const dockerDir = getMediaDirectory(mediaType);
+          // Normalize to forward slashes and ensure absolute path
+          let normalizedDir = String(dockerDir).replace(/\\/g, '/');
+          // Remove any trailing slashes
+          normalizedDir = normalizedDir.replace(/\/+$/, '');
+          // Ensure leading slash for absolute path
+          if (!normalizedDir.startsWith('/')) {
+            normalizedDir = '/' + normalizedDir;
+          }
+          // Construct final path with forward slashes
+          return normalizedDir + '/' + filename;
+        } catch {
+          // Fallback to MEDIA_BASE_DIR - ensure absolute path with forward slashes
+          let mediaBaseDir = (process.env.MEDIA_BASE_DIR || '/app/uploads').replace(/\\/g, '/');
+          // Remove any trailing slashes
+          mediaBaseDir = mediaBaseDir.replace(/\/+$/, '');
+          // Ensure leading slash
+          if (!mediaBaseDir.startsWith('/')) {
+            mediaBaseDir = '/' + mediaBaseDir;
+          }
+          return mediaBaseDir + '/' + mediaType + '/' + filename;
+        }
+      }
+    }
+    return null;
+  }
+  
+  // Extract relative path from "uploads" onwards
+  const relativePath = pathAfterDrive.substring(uploadsIndex);
+  // relativePath is now like "uploads/photo/filename.jpg"
+  
+  // Extract media type and filename
+  const pathParts = relativePath.split('/');
+  if (pathParts.length < 3) return null; // Should be "uploads/type/filename"
+  
+  const mediaType = pathParts[1]; // "photo", "signature", "thumb", etc.
+  const filename = pathParts[2];
+  
+  // Use getMediaDirectory to get the correct Docker container path
+  try {
+    const dockerDir = getMediaDirectory(mediaType);
+    // Normalize to forward slashes and ensure absolute path
+    let normalizedDir = String(dockerDir).replace(/\\/g, '/');
+    // Remove any trailing slashes
+    normalizedDir = normalizedDir.replace(/\/+$/, '');
+    // Ensure leading slash for absolute path
+    if (!normalizedDir.startsWith('/')) {
+      normalizedDir = '/' + normalizedDir;
+    }
+    // Construct final path with forward slashes
+    const finalPath = normalizedDir + '/' + filename;
+    return finalPath;
+  } catch {
+    // Fallback to MEDIA_BASE_DIR - ensure absolute path with forward slashes
+    let mediaBaseDir = (process.env.MEDIA_BASE_DIR || '/app/uploads').replace(/\\/g, '/');
+    // Remove any trailing slashes
+    mediaBaseDir = mediaBaseDir.replace(/\/+$/, '');
+    // Ensure leading slash
+    if (!mediaBaseDir.startsWith('/')) {
+      mediaBaseDir = '/' + mediaBaseDir;
+    }
+    return mediaBaseDir + '/' + mediaType + '/' + filename;
+  }
+}
+
+/**
+ * Resolve file path, handling Windows absolute paths in Docker containers
+ * @param {string} filePath - File path (can be Windows absolute, Linux absolute, or relative)
+ * @returns {string} - Resolved path for Docker container
+ */
+function resolveFilePath(filePath) {
+  if (!filePath) return null;
+  
+  // Check if it's a Windows absolute path
+  const isWindowsPath = /^[A-Za-z]:\\/.test(filePath);
+  if (isWindowsPath) {
+    // Only convert to Docker path if we're actually running in Docker
+    const inDocker = isRunningInDocker();
+    if (inDocker) {
+      const dockerPath = convertWindowsPathToDockerPath(filePath);
+      if (dockerPath) {
+        // Final normalization to ensure Linux absolute path
+        let normalized = String(dockerPath).replace(/\\/g, '/');
+        // Ensure leading slash
+        if (!normalized.startsWith('/')) {
+          normalized = '/' + normalized;
+        }
+        console.log(`🔄 Converted Windows path: ${filePath} → ${normalized}`);
+        return normalized;
+      }
+      // If conversion fails, log warning but try to continue
+      console.warn(`⚠️ Could not convert Windows path: ${filePath}`);
+    } else {
+      // Running locally on Windows - use the Windows path as-is
+      return filePath;
+    }
+  }
+  
+  // Handle Linux/Unix absolute paths (starts with /)
+  if (filePath.startsWith('/')) {
+    // Ensure forward slashes
+    return filePath.replace(/\\/g, '/');
+  }
+  
+  // Handle relative paths
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const joinedPath = path.join(process.cwd(), normalizedPath);
+  // Normalize path separators: use forward slashes in Docker, platform-specific otherwise
+  const inDocker = isRunningInDocker();
+  if (inDocker) {
+    return joinedPath.replace(/\\/g, '/');
+  }
+  return joinedPath;
+}
 
 /**
  * Save media file to appropriate directory
@@ -36,25 +216,20 @@ export async function saveMediaFile(buffer, type, employeeObjId) {
 
 /**
  * Delete old media file
- * @param {string} filePath - Relative file path
+ * @param {string} filePath - File path (can be Windows absolute, Linux absolute, or relative)
  */
 export async function deleteMediaFile(filePath) {
   if (!filePath) return;
 
   try {
-    let fullPath;
-    if (path.isAbsolute(filePath)) {
-      // If it's already an absolute path, use it directly
-      fullPath = filePath;
-    } else {
-      // If it's a relative path, join with process.cwd()
-      // Normalize path separators for cross-platform compatibility
-      const normalizedPath = filePath.replace(/\\/g, '/');
-      fullPath = path.join(process.cwd(), normalizedPath);
+    const fullPath = resolveFilePath(filePath);
+    if (!fullPath) {
+      console.warn(`⚠️ Could not resolve path for deletion: ${filePath}`);
+      return;
     }
     
     await fs.unlink(fullPath);
-    console.log(`🗑️ Deleted old file: ${filePath}`);
+    console.log(`🗑️ Deleted old file: ${filePath} (${fullPath})`);
   } catch (error) {
     console.warn(`⚠️ Could not delete file ${filePath}:`, error.message);
   }
@@ -62,23 +237,15 @@ export async function deleteMediaFile(filePath) {
 
 /**
  * Check if file exists
- * @param {string} filePath - Relative file path
+ * @param {string} filePath - File path (can be Windows absolute, Linux absolute, or relative)
  * @returns {boolean}
  */
 export async function fileExists(filePath) {
   if (!filePath) return false;
 
   try {
-    let fullPath;
-    if (path.isAbsolute(filePath)) {
-      // If it's already an absolute path, use it directly
-      fullPath = filePath;
-    } else {
-      // If it's a relative path, join with process.cwd()
-      // Normalize path separators for cross-platform compatibility
-      const normalizedPath = filePath.replace(/\\/g, '/');
-      fullPath = path.join(process.cwd(), normalizedPath);
-    }
+    const fullPath = resolveFilePath(filePath);
+    if (!fullPath) return false;
     
     await fs.access(fullPath);
     return true;
@@ -89,7 +256,7 @@ export async function fileExists(filePath) {
 
 /**
  * Read media file as base64
- * @param {string} filePath - Relative file path
+ * @param {string} filePath - File path (can be Windows absolute, Linux absolute, or relative)
  * @returns {string} - Base64 data URL
  */
 export async function readMediaAsBase64(filePath) {
@@ -98,16 +265,10 @@ export async function readMediaAsBase64(filePath) {
   }
 
   try {
-    // Handle both absolute and relative paths
-    let fullPath;
-    if (path.isAbsolute(filePath)) {
-      // If it's already an absolute path, use it directly
-      fullPath = filePath;
-    } else {
-      // If it's a relative path, join with process.cwd()
-      // Normalize path separators for cross-platform compatibility
-      const normalizedPath = filePath.replace(/\\/g, '/');
-      fullPath = path.join(process.cwd(), normalizedPath);
+    const fullPath = resolveFilePath(filePath);
+    if (!fullPath) {
+      console.warn(`⚠️ Could not resolve path: ${filePath}`);
+      return null;
     }
     
     const buffer = await fs.readFile(fullPath);
@@ -118,7 +279,8 @@ export async function readMediaAsBase64(filePath) {
     return `data:${mimeType};base64,${buffer.toString('base64')}`;
   } catch (error) {
     console.warn(`⚠️ Could not read file ${filePath}:`, error.message);
-    console.warn(`⚠️ Full path attempted:`, path.isAbsolute(filePath) ? filePath : path.join(process.cwd(), filePath));
+    const attemptedPath = resolveFilePath(filePath);
+    console.warn(`⚠️ Full path attempted: ${attemptedPath || filePath}`);
     return null;
   }
 }
