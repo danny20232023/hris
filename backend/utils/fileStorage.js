@@ -157,8 +157,10 @@ function resolveFilePath(filePath) {
         console.log(`🔄 Converted Windows path: ${filePath} → ${normalized}`);
         return normalized;
       }
-      // If conversion fails, log warning but try to continue
+      // If conversion fails in Docker, return null instead of falling through
+      // This prevents Windows paths from being incorrectly treated as relative paths
       console.warn(`⚠️ Could not convert Windows path: ${filePath}`);
+      return null;
     } else {
       // Running locally on Windows - use the Windows path as-is
       return filePath;
@@ -279,8 +281,11 @@ export async function readMediaAsBase64(filePath) {
     return `data:${mimeType};base64,${buffer.toString('base64')}`;
   } catch (error) {
     console.warn(`⚠️ Could not read file ${filePath}:`, error.message);
+    // Only log attempted path if it's different from the input
     const attemptedPath = resolveFilePath(filePath);
-    console.warn(`⚠️ Full path attempted: ${attemptedPath || filePath}`);
+    if (attemptedPath && attemptedPath !== filePath) {
+      console.warn(`⚠️ Full path attempted: ${attemptedPath}`);
+    }
     return null;
   }
 }
