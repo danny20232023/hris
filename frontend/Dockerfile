@@ -20,7 +20,9 @@ RUN npm run build
 # Stage 2: Production
 FROM nginx:alpine
 
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Copy built files to a temporary location (not /usr/share/nginx/html)
+# This preserves them before the volume mount overrides the directory
+COPY --from=builder /app/dist /tmp/frontend-dist
 
 # Copy nginx config template
 COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template

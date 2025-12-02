@@ -76,7 +76,10 @@ function DTROTtab() {
         ) : accessibleTabs.length === 0 ? (
           <div className="p-6 text-sm text-gray-500">You do not have permission to view any OT tabs.</div>
         ) : activeTabConfig ? (
-          <activeTabConfig.component />
+          (() => {
+            const ActiveComponent = activeTabConfig.component;
+            return <ActiveComponent />;
+          })()
         ) : (
           <div className="p-6 text-sm text-gray-500">Select a tab to continue.</div>
         )}
