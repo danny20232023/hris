@@ -31,8 +31,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_URL=${VITE_API_URL:-https://${DOMAIN_NAME:-hris.dalaguete.gov.ph}/api}
-        - VITE_UPLOADS_URL=${VITE_UPLOADS_URL:-https://${DOMAIN_NAME:-hris.dalaguete.gov.ph}/uploads}
+        # Use relative path /api by default (works with nginx proxy)
+        # If you need absolute URL, set VITE_API_URL in .env.docker or environment
+        - VITE_API_URL=${VITE_API_URL:-/api}
+        - VITE_UPLOADS_URL=${VITE_UPLOADS_URL:-/uploads}
     container_name: hris-frontend
     restart: unless-stopped
     volumes:

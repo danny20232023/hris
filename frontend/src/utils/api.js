@@ -11,11 +11,19 @@ const getApiBaseUrl = () => {
     // When accessed via http://192.168.8.18:5173, this becomes /api which proxies to backend
     return '/api';
   }
-  // In production/Docker, use VITE_API_URL from environment
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
+  // In production/Docker, check if VITE_API_URL is set and valid
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    // If it's a full URL (starts with http:// or https://), use it as-is
+    if (apiUrl.startsWith('http://') || apiUrl.startsWith('https://')) {
+      return apiUrl;
+    }
+    // If it doesn't start with a protocol, it might be malformed
+    // Log a warning and fall back to relative path
+    console.warn('VITE_API_URL is set but missing protocol, using relative path:', apiUrl);
   }
-  // Fallback for production without env var
+  // Fallback: Use relative path which works with nginx proxy
+  // This is the safest option since nginx proxies /api to backend
   return '/api';
 };
 
