@@ -15,27 +15,34 @@ import {
   getDtrLogsForOt,
 } from '../controllers/DTREmployeeOTController.js';
 import { protect } from '../middleware/authMiddleware.js';
+import { requirePermission, requirePermissionForEither } from '../middleware/rbacMiddleware.js';
 
 const router = Router();
 
-// OT Transaction routes
-router.get('/transactions', protect, listOTTransactions);
-router.get('/transactions/:id', protect, getOTTransactionById);
-router.post('/transactions', protect, createOTTransaction);
-router.put('/transactions/:id', protect, updateOTTransaction);
-router.put('/transactions/:id/status', protect, updateOTTransactionStatus);
-router.delete('/transactions/:id', protect, deleteOTTransaction);
+// Component names for RBAC
+const COMPONENT_NAME_EMPLOYEE = 'dtr-employee-ot'; // For Employee Overtimes tab
+const COMPONENT_NAME_TRANSACTIONS = 'dtr-ot-transactions'; // For Transactions tab
+const COMPONENT_NAME_COMPUTE = 'dtr-compute-ot'; // For Compute Overtime tab
 
-// OT Date routes
-router.get('/dates', protect, listOTDates);
-router.post('/dates', protect, createOTDate);
-router.put('/dates/:id', protect, updateOTDate);
-router.delete('/dates/:id', protect, deleteOTDate);
+// OT Transaction routes - RBAC protected (used by both Transactions and Compute Overtime tabs)
+router.get('/transactions', protect, requirePermissionForEither(COMPONENT_NAME_TRANSACTIONS, COMPONENT_NAME_COMPUTE, 'read'), listOTTransactions);
+router.get('/transactions/:id', protect, requirePermissionForEither(COMPONENT_NAME_TRANSACTIONS, COMPONENT_NAME_COMPUTE, 'read'), getOTTransactionById);
+router.post('/transactions', protect, requirePermission(COMPONENT_NAME_TRANSACTIONS, 'create'), createOTTransaction);
+router.put('/transactions/:id', protect, requirePermission(COMPONENT_NAME_TRANSACTIONS, 'update'), updateOTTransaction);
+router.put('/transactions/:id/status', protect, requirePermission(COMPONENT_NAME_TRANSACTIONS, 'approve'), updateOTTransactionStatus);
+router.delete('/transactions/:id', protect, requirePermission(COMPONENT_NAME_TRANSACTIONS, 'delete'), deleteOTTransaction);
 
-// Lookup routes
-router.get('/types', protect, listOTTypes);
-router.get('/employees', protect, listEmployeesWithOT);
-router.get('/dtr-logs/:empObjId/:date', protect, getDtrLogsForOt);
+// OT Date routes - RBAC protected (used by both Transactions and Compute Overtime tabs)
+router.get('/dates', protect, requirePermissionForEither(COMPONENT_NAME_TRANSACTIONS, COMPONENT_NAME_COMPUTE, 'read'), listOTDates);
+router.post('/dates', protect, requirePermission(COMPONENT_NAME_TRANSACTIONS, 'create'), createOTDate);
+router.put('/dates/:id', protect, requirePermissionForEither(COMPONENT_NAME_TRANSACTIONS, COMPONENT_NAME_COMPUTE, 'update'), updateOTDate);
+router.delete('/dates/:id', protect, requirePermission(COMPONENT_NAME_TRANSACTIONS, 'delete'), deleteOTDate);
+
+// Lookup routes - RBAC protected (read permission for lookups)
+// These are used by Employee Overtimes, Transactions, and Compute Overtime tabs
+router.get('/types', protect, requirePermissionForEither(COMPONENT_NAME_TRANSACTIONS, COMPONENT_NAME_COMPUTE, 'read'), listOTTypes);
+router.get('/employees', protect, requirePermissionForEither(COMPONENT_NAME_TRANSACTIONS, COMPONENT_NAME_COMPUTE, 'read'), listEmployeesWithOT);
+router.get('/dtr-logs/:empObjId/:date', protect, requirePermissionForEither(COMPONENT_NAME_TRANSACTIONS, COMPONENT_NAME_COMPUTE, 'read'), getDtrLogsForOt);
 
 export default router;
 

@@ -40,7 +40,7 @@ async function mapDesignationRow(row) {
 export const listDesignations = async (req, res) => {
   try {
     const pool = getHR201Pool();
-    const { search = '', rankId = '', appointmentId = '', status = 'active' } = req.query;
+    const { search = '', rankId = '', appointmentId = '', status = 'active', emp_objid = '' } = req.query;
 
     const params = [];
     let query = `
@@ -108,6 +108,11 @@ export const listDesignations = async (req, res) => {
       // Filter by appointmentstatus (lookup to appointmenttypes table)
       query += ' AND ed.appointmentstatus = ?';
       params.push(appointmentId);
+    }
+    if (emp_objid) {
+      // Filter by employee objid
+      query += ' AND ed.emp_objid = ?';
+      params.push(emp_objid);
     }
 
     query += ' ORDER BY e.surname, e.firstname, e.middlename';

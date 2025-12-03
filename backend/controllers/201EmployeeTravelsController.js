@@ -17,13 +17,24 @@ const mapTransactionRows = async (rows) => {
           if (seenEmployees.has(objid)) continue;
           seenEmployees.add(objid);
 
-          const name = parts.slice(1, -1).join(':').trim();
-          const photo_path = parts[parts.length - 1];
+          // Format: objid:name:photo_path:departmentshortname:officehead:designationtype
+          // parts[0] = objid
+          // parts[1] = name (surname, firstname middlename)
+          // parts[2] = photo_path
+          // parts[3] = departmentshortname (if exists)
+          // parts[4] = officehead (if exists)
+          // parts[5] = designationtype (if exists)
+          const name = parts[1] || '';
+          const photo_path = parts[2] || '';
+          const departmentshortname = parts[3] || '';
+          const officehead = parts[4] || '';
+          const designationtype = parts[5] || '';
 
           let photo = null;
-          if (photo_path && photo_path.trim()) {
+          if (photo_path && photo_path.trim() && objid) {
             try {
-              photo = await readMediaAsBase64(photo_path.trim());
+              // photo_path is now INT (pathid), requires objid and type
+              photo = await readMediaAsBase64(photo_path.trim(), objid, 'photo');
             } catch (e) {
               console.warn('Failed to load photo for employee:', objid, e.message);
               photo = null;
@@ -42,6 +53,9 @@ const mapTransactionRows = async (rows) => {
             objid,
             name: formatEmployeeName(lastName, firstName, middleName) || 'Unknown',
             photo_path: photo,
+            departmentshortname: departmentshortname || '',
+            officehead: officehead || '',
+            designationtype: designationtype || '',
           });
         }
       }
@@ -123,7 +137,8 @@ const mapTransactionRows = async (rows) => {
             approvedByEmployeeName = approvedByEmployeeName || fullname;
             if (!approvedByPhoto && approver.photo_path) {
               try {
-                approvedByPhoto = await readMediaAsBase64(approver.photo_path);
+                // photo_path is now INT (pathid), requires objid and type
+                approvedByPhoto = await readMediaAsBase64(approver.photo_path, approver.objid, 'photo');
               } catch (e) {
                 console.warn('Failed to load portal approver photo:', e.message);
               }
@@ -439,7 +454,7 @@ export const listTransactions = async (req, res) => {
     
     let sql = `
       SELECT t.*,
-             GROUP_CONCAT(DISTINCT CONCAT(e.objid, ':', e.surname, ', ', e.firstname, ' ', COALESCE(e.middlename, ''), ':', COALESCE(em.photo_path, '')) SEPARATOR '|') AS employees_data,
+             GROUP_CONCAT(DISTINCT CONCAT(e.objid, ':', e.surname, ', ', e.firstname, ' ', COALESCE(e.middlename, ''), ':', COALESCE(em.photo_path, ''), ':', COALESCE(dept_cur.departmentshortname, dept_emp.departmentshortname, ''), ':', COALESCE(dept_cur.officehead, dept_emp.officehead, ''), ':', COALESCE(dept_cur.designationtype, dept_emp.designationtype, '')) SEPARATOR '|') AS employees_data,
              GROUP_CONCAT(DISTINCT DATE_FORMAT(d.traveldate, '%m/%d/%Y') ORDER BY d.traveldate SEPARATOR ', ') AS travel_dates,
              su.photo AS created_by_photo_blob,
              su.username AS created_by_username,
@@ -450,6 +465,9 @@ export const listTransactions = async (req, res) => {
       LEFT JOIN employee_travels_dates d ON d.travel_objid = t.objid
       LEFT JOIN employees e ON e.objid = d.emp_objid
       LEFT JOIN employees_media em ON em.emp_objid = e.objid
+      LEFT JOIN employee_designation ed ON ed.emp_objid = e.objid AND CAST(ed.ispresent AS UNSIGNED) = 1
+      LEFT JOIN department dept_emp ON dept_emp.deptid = e.deptid
+      LEFT JOIN department dept_cur ON dept_cur.deptid = ed.assigneddept
       LEFT JOIN sysusers su ON t.createdby = su.id
       LEFT JOIN employees c ON c.objid = su.emp_objid
       WHERE 1=1

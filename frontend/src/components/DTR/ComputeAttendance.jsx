@@ -9,12 +9,22 @@ import { usePermissions } from '../../hooks/usePermissions';
 
 const ComputeAttendance = () => {
   const { can, canAccessPage, isRootAdmin, loading: permissionsLoading } = usePermissions();
-  const canViewComputeAttendance = canAccessPage('compute-attendance') || isRootAdmin;
-  const canReadComputeAttendance = isRootAdmin || can('compute-attendance', 'read');
-  const canProcessAttendance = isRootAdmin || can('compute-attendance', 'update');
-  const canDownloadAttendance = isRootAdmin || can('compute-attendance', 'print');
+  const COMPONENT_ID = 'compute-attendance';
+  
+  // Menu visibility check (canaccesspage=1)
+  const canViewComputeAttendance = canAccessPage(COMPONENT_ID) || isRootAdmin;
+  
+  // CRUD permissions
+  const canReadComputeAttendance = isRootAdmin || can(COMPONENT_ID, 'read');
+  const canCreateComputeAttendance = isRootAdmin || can(COMPONENT_ID, 'create');
+  const canUpdateComputeAttendance = isRootAdmin || can(COMPONENT_ID, 'update');
+  const canDeleteAttendance = isRootAdmin || can(COMPONENT_ID, 'delete');
+  const canPrintComputeAttendance = isRootAdmin || can(COMPONENT_ID, 'print');
+  
+  // Other permissions
+  const canProcessAttendance = canUpdateComputeAttendance; // Process uses update permission
+  const canDownloadAttendance = canPrintComputeAttendance; // Download uses print permission
   const canOpenFixModal = isRootAdmin || can('fix-dtr-checktime', 'update');
-  const canDeleteAttendance = isRootAdmin || can('compute-attendance', 'delete');
   const canViewRecomputeTab = isRootAdmin || canAccessPage('recomputed-dtr');
   const canRecompute = isRootAdmin || can('recomputed-dtr', 'update');
   const [departments, setDepartments] = useState([]);
@@ -179,6 +189,10 @@ const ComputeAttendance = () => {
   // Fetch departments
   useEffect(() => {
     const fetchDepartments = async () => {
+      if (!canReadComputeAttendance) {
+        console.warn('⚠️ No read permission for compute attendance - skipping department fetch');
+        return;
+      }
       try {
         console.log('🔄 Fetching departments from ComputeAttendance API...');
         const response = await api.get('/compute-attendance/departments');
@@ -186,10 +200,13 @@ const ComputeAttendance = () => {
         setDepartments(response.data);
       } catch (error) {
         console.error('❌ Error fetching departments:', error);
+        setDepartments([]);
       }
     };
+    if (!permissionsLoading) {
     fetchDepartments();
-  }, []);
+    }
+  }, [canReadComputeAttendance, permissionsLoading]);
 
   useEffect(() => {
     const fetchEmployeeStatusTypes = async () => {
@@ -513,6 +530,10 @@ const ComputeAttendance = () => {
 
   // Calculate attendance for department
   const calculateDepartmentAttendance = async () => {
+    if (!canCreateComputeAttendance) {
+      alert('You do not have permission to calculate attendance.');
+      return;
+    }
     try {
       setLoading(true);
       console.log('🔍 Calculating attendance for department:', selectedDepartment);
@@ -917,6 +938,10 @@ const ComputeAttendance = () => {
 
   // Handle individual employee recompute
   const handleIndividualRecompute = async (employee) => {
+    if (!canCreateComputeAttendance) {
+      alert('You do not have permission to recompute attendance.');
+      return;
+    }
     try {
       if (!selectedMonth || !selectedPeriod) {
         alert('Please select month and period');

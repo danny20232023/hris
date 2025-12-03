@@ -525,11 +525,15 @@ export const calculatePDSProgress = async (employeeObjId) => {
     
     // Page 2: Family Background
     // Spouse fields (4 fields) - excluding spouse_extension
+    // Only count if civil_status is NOT "single"
     const [spouses] = await pool.execute('SELECT * FROM employee_spouses WHERE emp_objid = ?', [employeeObjId]);
     const spouseFields = ['spouse_surname', 'spouse_firstname', 'spouse_middlename', 'spouse_occupation'];
+    const isSingle = emp.civil_status && emp.civil_status.toLowerCase() === 'single';
+    if (!isSingle) {
     totalFields += spouseFields.length;
     if (spouses.length > 0) {
       filledFields += spouseFields.filter(f => spouses[0][f] && spouses[0][f] !== '').length;
+      }
     }
     
     // Parent fields (6 fields) - excluding father_extension
@@ -538,32 +542,30 @@ export const calculatePDSProgress = async (employeeObjId) => {
     totalFields += parentFields.length;
     filledFields += parentFields.filter(f => emp[f] && emp[f] !== '').length;
     
-    // Children (1 section = 1 field)
-    const [children] = await pool.execute('SELECT * FROM employee_childrens WHERE emp_objid = ?', [employeeObjId]);
-    totalFields += 1;
-    if (children.length > 0 && children.some(c => c.name || c.dateofbirth)) filledFields += 1;
+    // Children section - EXCLUDED from progress calculation
     
-    // Education (5 rows = one for each education level)
+    // Education (only Elementary row counts as 1 field)
     const [education] = await pool.execute('SELECT * FROM employee_education WHERE emp_objid = ?', [employeeObjId]);
-    totalFields += 5; // 5 education levels as complete rows
+    totalFields += 1; // Only Elementary education level counts
     
-    // Count complete education rows (all required fields filled)
-    let completeEducationRows = 0;
-    education.forEach(edu => {
+    // Check if Elementary row is complete (all required fields filled)
+    const elementaryEducation = education.find(edu => 
+      edu.level && edu.level.toLowerCase().includes('elementary')
+    );
+    
+    if (elementaryEducation) {
       const hasRequiredFields = 
-        edu.school_name && typeof edu.school_name === 'string' && edu.school_name.trim() !== '' &&
-        edu.degree_course && typeof edu.degree_course === 'string' && edu.degree_course.trim() !== '' &&
-        edu.period_from && typeof edu.period_from === 'string' && edu.period_from.trim() !== '' &&
-        edu.period_to && typeof edu.period_to === 'string' && edu.period_to.trim() !== '' &&
-        edu.highest_level_units && typeof edu.highest_level_units === 'string' && edu.highest_level_units.trim() !== '' &&
-        edu.year_graduated && edu.year_graduated.toString().trim() !== '';
+        elementaryEducation.school_name && typeof elementaryEducation.school_name === 'string' && elementaryEducation.school_name.trim() !== '' &&
+        elementaryEducation.degree_course && typeof elementaryEducation.degree_course === 'string' && elementaryEducation.degree_course.trim() !== '' &&
+        elementaryEducation.period_from && typeof elementaryEducation.period_from === 'string' && elementaryEducation.period_from.trim() !== '' &&
+        elementaryEducation.period_to && typeof elementaryEducation.period_to === 'string' && elementaryEducation.period_to.trim() !== '' &&
+        elementaryEducation.highest_level_units && typeof elementaryEducation.highest_level_units === 'string' && elementaryEducation.highest_level_units.trim() !== '' &&
+        elementaryEducation.year_graduated && elementaryEducation.year_graduated.toString().trim() !== '';
       
       if (hasRequiredFields) {
-        completeEducationRows++;
+        filledFields += 1;
       }
-    });
-    
-    filledFields += completeEducationRows;
+    }
     
     // Civil Service Eligibility (1 section = 1 field)
     const [eligibility] = await pool.execute('SELECT * FROM employee_eligibility WHERE emp_objid = ?', [employeeObjId]);
@@ -602,9 +604,9 @@ export const calculatePDSProgress = async (employeeObjId) => {
     totalFields += 1;
     if (govIds.length > 0 && govIds.some(g => g.gov_id)) filledFields += 1;
     
-    // Media (4 fields: signature, photo, thumb, date_accomplished)
+    // Media (3 fields: signature, photo, thumb - date_accomplished excluded)
     const [media] = await pool.execute('SELECT * FROM employees_media WHERE emp_objid = ?', [employeeObjId]);
-    totalFields += 4;
+    totalFields += 3;
     let mediaFilled = 0;
     if (media.length > 0) {
       if (media[0].signature_path) {
@@ -619,16 +621,8 @@ export const calculatePDSProgress = async (employeeObjId) => {
         filledFields += 1;
         mediaFilled += 1;
       }
-      // Check if date_accomplished is filled (not null and not empty)
-      if (media[0].date_accomplished && media[0].date_accomplished !== '' && media[0].date_accomplished !== '0000-00-00') {
-        filledFields += 1;
-        mediaFilled += 1;
-        console.log(`📅 Date accomplished found: ${media[0].date_accomplished}`);
-      } else {
-        console.log(`📅 Date accomplished missing or empty: ${media[0].date_accomplished}`);
-      }
     }
-    console.log(`📊 Media section: ${mediaFilled}/4 fields filled`);
+    console.log(`📊 Media section: ${mediaFilled}/3 fields filled`);
     
     const percentage = totalFields > 0 ? Math.round((filledFields / totalFields) * 100 * 100) / 100 : 0;
     console.log(`📊 PDS Progress: ${filledFields}/${totalFields} = ${percentage}%`);
@@ -1311,7 +1305,7 @@ export const savePDS = async (req, res) => {
             // Truncate fields to match database schema lengths
             const truncated = {
               level: (edu.level || '').substring(0, 25),
-              school_name: (edu.school_name || '').substring(0, 25),
+              school_name: edu.school_name || '', // No limit - database field is TEXT type
               course: (edu.degree_course || '').substring(0, 50),
               highest_level: (edu.highest_level_units || '').substring(0, 15),
               honor_received: (edu.scholarship_honors || '').substring(0, 25)

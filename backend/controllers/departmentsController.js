@@ -17,6 +17,7 @@ const shapeDepartment = (row = {}) => {
     isdepartment: coerceIsDepartment(row.isdepartment ?? row.ISDEPARTMENT),
     emp_objid: row.emp_objid ?? row.EMP_OBJID ?? null,
     officehead: row.officehead ?? row.OFFICEHEAD ?? null,
+    designationtype: row.designationtype ?? row.DESIGNATIONTYPE ?? null,
     accountcode: row.accountcode ?? row.ACCOUNTCODE ?? null
   };
 
@@ -30,6 +31,7 @@ const shapeDepartment = (row = {}) => {
     ISDEPARTMENT: normalized.isdepartment,
     EMP_OBJID: normalized.emp_objid,
     OFFICEHEAD: normalized.officehead,
+    DESIGNATIONTYPE: normalized.designationtype,
     ACCOUNTCODE: normalized.accountcode
   };
 };
@@ -55,6 +57,7 @@ export const getDepartments = async (req, res) => {
          COALESCE(d.isdepartment, 1) AS isdepartment,
          d.emp_objid,
          d.officehead,
+         d.designationtype,
          d.accountcode
        FROM department d
        ORDER BY d.departmentname`
@@ -84,6 +87,7 @@ export const getDepartmentById = async (req, res) => {
          COALESCE(d.isdepartment, 1) AS isdepartment,
          d.emp_objid,
          d.officehead,
+         d.designationtype,
          d.accountcode
        FROM department d
        WHERE d.deptid = ?`,
@@ -121,6 +125,7 @@ export const createDepartment = async (req, res) => {
       isdepartment = 1,
       emp_objid = null,
       officehead = null,
+      designationtype = null,
       accountcode = null
     } = req.body;
 
@@ -155,6 +160,7 @@ export const createDepartment = async (req, res) => {
       Number(isdepartment) === 1 ? 1 : 0,
       emp_objid || null,
       officehead ? officehead.trim() : null,
+      designationtype ? designationtype.trim() : null,
       accountcode ? accountcode.trim() : null
     ];
 
@@ -167,8 +173,9 @@ export const createDepartment = async (req, res) => {
         isdepartment,
         emp_objid,
         officehead,
+        designationtype,
         accountcode
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       payload
     );
 
@@ -182,6 +189,7 @@ export const createDepartment = async (req, res) => {
          COALESCE(d.isdepartment, 1) AS isdepartment,
          d.emp_objid,
          d.officehead,
+         d.designationtype,
          d.accountcode
        FROM department d
        WHERE d.deptid = ?`,
@@ -214,6 +222,7 @@ export const updateDepartment = async (req, res) => {
       isdepartment = 1,
       emp_objid = null,
       officehead = null,
+      designationtype = null,
       accountcode = null
     } = req.body;
 
@@ -267,6 +276,7 @@ export const updateDepartment = async (req, res) => {
       Number(isdepartment) === 1 ? 1 : 0,
       emp_objid || null,
       officehead ? officehead.trim() : null,
+      designationtype ? designationtype.trim() : null,
       accountcode ? accountcode.trim() : null,
       Number(id)
     ];
@@ -281,6 +291,7 @@ export const updateDepartment = async (req, res) => {
          isdepartment = ?,
          emp_objid = ?,
          officehead = ?,
+         designationtype = ?,
          accountcode = ?
        WHERE deptid = ?`,
       updatePayload

@@ -5,18 +5,23 @@ import DtrOTTransactions from './DtrOTTransactions';
 import DTRComputeOT from './DTRComputeOT';
 
 const TAB_CONFIG = [
-  { id: 'employee', label: 'Employee Overtimes', component: DTREmployeeOT, permissionId: 'dtr-overtime-employee' },
-  { id: 'transactions', label: 'Transactions', component: DtrOTTransactions, permissionId: 'dtr-overtime-transactions' },
-  { id: 'compute', label: 'Compute Overtime', component: DTRComputeOT, permissionId: 'dtr-overtime-compute' },
+  { id: 'employee', label: 'Employee Overtimes', component: DTREmployeeOT, permissionId: 'dtr-employee-ot' },
+  { id: 'transactions', label: 'Transactions', component: DtrOTTransactions, permissionId: 'dtr-ot-transactions' },
+  { id: 'compute', label: 'Compute Overtime', component: DTRComputeOT, permissionId: 'dtr-compute-ot' },
 ];
 
 function DTROTtab() {
-  const { can, loading: permissionsLoading } = usePermissions();
+  const { can, canAccessPage, loading: permissionsLoading } = usePermissions();
   const [activeTab, setActiveTab] = useState('');
 
   const accessibleTabs = useMemo(
-    () => TAB_CONFIG.filter((tab) => can(tab.permissionId, 'read')),
-    [can]
+    () => TAB_CONFIG.filter((tab) => {
+      // Check both canaccesspage and canread permissions
+      const hasPageAccess = canAccessPage(tab.permissionId);
+      const hasReadPermission = can(tab.permissionId, 'read');
+      return hasPageAccess && hasReadPermission;
+    }),
+    [can, canAccessPage]
   );
 
   useEffect(() => {

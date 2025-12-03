@@ -548,17 +548,31 @@ const ActionIconButton = ({ title, onClick, disabled, children, colorClass = 'te
 );
 
 const DTRComputeOT = () => {
-  const { can, loading: permissionsLoading } = usePermissions();
-  const COMPONENT_ID = 'dtr-overtime-compute';
+  const { can, canAccessPage, loading: permissionsLoading } = usePermissions();
+  const COMPONENT_ID = 'dtr-compute-ot'; // Match the permissionId in DTROTtab
+  
+  // Check menu visibility first (canaccesspage=1)
+  const canViewPage = canAccessPage(COMPONENT_ID);
+  
+  // CRUD permissions
   const componentPermissions = useMemo(
     () => ({
       read: can(COMPONENT_ID, 'read'),
+      create: can(COMPONENT_ID, 'create'),
       update: can(COMPONENT_ID, 'update'),
+      delete: can(COMPONENT_ID, 'delete'),
+      print: can(COMPONENT_ID, 'print'),
     }),
     [can]
   );
 
-  const { read: canRead, update: canUpdate } = componentPermissions;
+  const { 
+    read: canRead, 
+    create: canCreate,
+    update: canUpdate,
+    delete: canDelete,
+    print: canPrint
+  } = componentPermissions;
 
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState([]);
@@ -808,10 +822,18 @@ const DTRComputeOT = () => {
   );
 
   const handleCompute = async (row) => {
+    if (!canUpdate) {
+      alert('You do not have permission to compute OT.');
+      return;
+    }
     await computeRow(row);
   };
 
   const handleComputeAll = async () => {
+    if (!canUpdate) {
+      alert('You do not have permission to compute OT.');
+      return;
+    }
     if (renderedRows.length === 0) {
       alert('There are no OT records in the current list to compute.');
       return;
@@ -973,8 +995,26 @@ const DTRComputeOT = () => {
     return <div className="p-6 text-sm text-gray-500">Loading permissions...</div>;
   }
 
+  // Early return if no page access (canaccesspage=0)
+  if (!permissionsLoading && !canViewPage) {
+    return (
+      <div className="p-6">
+        <div className="bg-white rounded-lg shadow p-6 text-center text-red-600">
+          You do not have permission to access this page (canaccesspage=0).
+        </div>
+      </div>
+    );
+  }
+
+  // Early return if no read permission
   if (!canRead) {
-    return <div className="p-6 text-sm text-red-600">You do not have permission to view this tab.</div>;
+    return (
+      <div className="p-6">
+        <div className="bg-white rounded-lg shadow p-6 text-center text-red-600">
+          You do not have permission to view this tab.
+        </div>
+      </div>
+    );
   }
 
   return (

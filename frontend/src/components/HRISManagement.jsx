@@ -20,6 +20,7 @@ import DTRShifts from './DTR/DTRShifts';
 import DTRHolidays from './DTR/DTRHolidays';
 import DTREmployee_cdo from './DTR/DTREmployee_cdo';
 import DTROTtab from './DTR/DTROTtab';
+import AdminApprovalDashboard from './adminApprovalDashboard';
 // Note: Embedded/Modal components (not separate menu items):
 // - RawLogsView_Management, ShiftSchedView_Management are in TimeLogsManagement
 // - RawLogsView_Dtr, MyShiftView are in DtrChecker
@@ -52,7 +53,7 @@ import SysUser from './SysUser';
 const HRISManagement = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { can, canAccessPage, hasComponentGroupAccess } = usePermissions();
+  const { can, canAccessPage, hasComponentGroupAccess, permissions } = usePermissions();
   
   // State Management
   const [activeModule, setActiveModule] = useState('dtr');
@@ -374,6 +375,45 @@ const HRISManagement = () => {
 
   // Render active component based on selection
   const renderActiveComponent = () => {
+    // Admin Approval Dashboard - Check canaccesspage for admin-approval-dashboard component first
+    if (activeTab === 'admin-approvals' || activeTab === 'admin-approval-dashboard') {
+      // First check: canaccesspage for the admin approval dashboard component itself
+      const ADMIN_DASHBOARD_COMPONENT = 'admin-approval-dashboard';
+      const hasDashboardAccessPage = canAccessPage(ADMIN_DASHBOARD_COMPONENT);
+      
+      if (!hasDashboardAccessPage) {
+        return (
+          <div className="p-6 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-yellow-700">You do not have permission to access the approval dashboard (canaccesspage=0).</p>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      
+      // If canaccesspage is allowed, then check for approval permissions
+      const approvalComponents = ['201-travel', 'dtr-cdo', '201-locator', '201-leave', 'dtr-fix-checktimes', 'dtr-ot-transactions'];
+      const hasApprovalPermission = approvalComponents.some(component => 
+        can(component, 'approve') || can(component, 'return') || can(component, 'cancel')
+      );
+      
+      if (!hasApprovalPermission) {
+        return (
+          <div className="p-6 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+            <div className="flex">
+              <div className="ml-3">
+                <p className="text-yellow-700">You do not have any approval permissions (approve/return/cancel) for any transaction type.</p>
+              </div>
+            </div>
+          </div>
+        );
+      }
+      
+      return <AdminApprovalDashboard />;
+    }
+
     // If activeTab is DTR-Reports, use activeSubTab as componentId
     // Otherwise, use activeSubTab if available, else activeTab
     const componentId = activeTab === 'DTR-Reports' 
@@ -401,7 +441,7 @@ const HRISManagement = () => {
     if (componentId === 'compute-attendance-report' || componentId === 'computed-attendances' || (activeTab === 'DTR-Reports' && (activeSubTab === 'compute-attendance-report' || activeSubTab === 'computed-attendances'))) return <ComputedAttendanceReport />;
     if (componentId === 'print-locator-entries') return <PrintLocatorEntries />;
     if (componentId === 'dtr-cdo') return <DTREmployee_cdo />;
-    if (componentId === 'dtr-overtime') return <DTROTtab />;
+    if (componentId === 'dtr-ot-tab') return <DTROTtab />;
     
     // Portal Users component (under DTR parent menu)
     if (componentId === 'portal-users') return <DTRPortalUsersTabs />;
@@ -504,6 +544,88 @@ const HRISManagement = () => {
 
         {/* Module Navigation */}
         <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+          {/* Admin Dashboard - Only show if user has canaccesspage=1 for admin-approval-dashboard component AND has approval permissions */}
+          {(() => {
+            // First check: canaccesspage for the admin approval dashboard component itself
+            const ADMIN_DASHBOARD_COMPONENT = 'admin-approval-dashboard';
+            
+            // Check canaccesspage directly from permissions (not using canAccessPage function which has root admin bypass)
+            let hasDashboardAccessPage = false;
+            
+            // Root admin (usertype=1) bypass - always allow
+            if (permissions?.isRootAdmin || user?.usertype === 1) {
+              hasDashboardAccessPage = true;
+            } else {
+              // Check wildcard permissions
+              if (permissions?.['*']) {
+                const wildcardAccess = permissions['*'].canaccesspage === true || permissions['*'].canaccesspage === 1;
+                if (!wildcardAccess) {
+                  console.log(`[Menu] Admin Dashboard: Wildcard canaccesspage is 0/false - denying access`);
+                }
+                hasDashboardAccessPage = wildcardAccess;
+              } else {
+                // Check component-specific permissions for admin-approval-dashboard
+                const dashboardPerms = permissions?.[ADMIN_DASHBOARD_COMPONENT];
+                if (dashboardPerms && typeof dashboardPerms === 'object' && 'canaccesspage' in dashboardPerms) {
+                  // Explicitly check for 0 or false - deny access in these cases
+                  const canAccessValue = dashboardPerms.canaccesspage;
+                  if (canAccessValue === 0 || canAccessValue === false || canAccessValue === '0') {
+                    console.log(`[Menu] Admin Dashboard: ${ADMIN_DASHBOARD_COMPONENT} canaccesspage is explicitly 0/false - denying access`, dashboardPerms);
+                    hasDashboardAccessPage = false;
+                  } else {
+                    // Only allow if explicitly 1 or true
+                    hasDashboardAccessPage = canAccessValue === true || canAccessValue === 1 || canAccessValue === '1';
+                    if (!hasDashboardAccessPage) {
+                      console.log(`[Menu] Admin Dashboard: ${ADMIN_DASHBOARD_COMPONENT} canaccesspage is not 1/true (value: ${canAccessValue}) - denying access`, dashboardPerms);
+                    }
+                  }
+                } else {
+                  // Component doesn't exist in permissions - fall back to checking individual approval components
+                  // This provides backward compatibility if the component hasn't been created in the database yet
+                  console.log(`[Menu] Admin Dashboard: ${ADMIN_DASHBOARD_COMPONENT} not found in permissions, falling back to individual component checks`);
+                  const approvalComponents = ['201-travel', 'dtr-cdo', '201-locator', '201-leave', 'dtr-fix-checktimes', 'dtr-ot-transactions'];
+                  for (const component of approvalComponents) {
+                    const componentPerms = permissions?.[component];
+                    if (componentPerms && typeof componentPerms === 'object' && 'canaccesspage' in componentPerms) {
+                      const canAccessValue = componentPerms.canaccesspage;
+                      if (canAccessValue === true || canAccessValue === 1 || canAccessValue === '1') {
+                        hasDashboardAccessPage = true;
+                        break;
+                      }
+                    }
+                  }
+                  if (!hasDashboardAccessPage) {
+                    console.log(`[Menu] Admin Dashboard: No approval component has canaccesspage=1 - denying access`);
+                  }
+                }
+              }
+            }
+            
+            // Check if user has any approval permission (approve/return/cancel) for any approval component
+            const approvalComponents = ['201-travel', 'dtr-cdo', '201-locator', '201-leave', 'dtr-fix-checktimes', 'dtr-ot-transactions'];
+            const hasApprovalPermission = approvalComponents.some(component => 
+              can(component, 'approve') || can(component, 'return') || can(component, 'cancel')
+            );
+            
+            // Menu only shows if user has BOTH canaccesspage=1 for admin-approval-dashboard (or fallback) AND approval permissions
+            return hasDashboardAccessPage && hasApprovalPermission;
+          })() && (
+            <button
+              onClick={() => {
+                setActiveTab('admin-approvals');
+                setActiveSubTab('');
+              }}
+              className={`w-full flex items-center px-3 py-3 text-sm font-bold rounded-lg transition-all duration-200 mb-2 ${
+                activeTab === 'admin-approvals'
+                  ? 'bg-blue-100 text-blue-700 shadow-sm'
+                  : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <span className="text-xl mr-3">⚖️</span>
+              <span className="flex-1 text-left">Admin Dashboard</span>
+            </button>
+          )}
+
           {/* DTR Parent Menu - Only show if user has components in 'DTR' group */}
           {hasComponentGroupAccess('DTR') && (
             <div>
@@ -564,20 +686,20 @@ const HRISManagement = () => {
                           : 'text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      <span className="mr-2">📝</span>
+                      <span className="mr-2">🏄</span>
                       <span className="flex-1 text-left">CDO</span>
                     </button>
                   )}
-                  {canAccessPage('dtr-overtime') && (
+                  {canAccessPage('dtr-ot-tab') && (
                     <button
-                      onClick={() => handleDtrSubTabClick('dtr-overtime')}
+                      onClick={() => handleDtrSubTabClick('dtr-ot-tab')}
                       className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-200 ${
-                        activeSubTab === 'dtr-overtime'
+                        activeSubTab === 'dtr-ot-tab'
                           ? 'bg-blue-50 text-blue-700 font-medium'
                           : 'text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      <span className="mr-2">⏰</span>
+                      <span className="mr-2">🧭</span>
                       <span className="flex-1 text-left">Overtime</span>
                     </button>
                   )}
@@ -616,7 +738,7 @@ const HRISManagement = () => {
                           : 'text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      <span className="mr-2">⏰</span>
+                      <span className="mr-2">⏳</span>
                       <span className="flex-1 text-left">Shifts</span>
                     </button>
                   )}
@@ -672,7 +794,7 @@ const HRISManagement = () => {
                 )}
                 {canAccessPage('201-employees') && (
                 <button onClick={() => { setActiveTab('201-employees'); setActiveSubTab(''); }} className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-200 ${activeTab === '201-employees' ? 'bg-green-50 text-green-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
-                  <span className="mr-2">👥</span>
+                  <span className="mr-2">👨‍👩</span>
                   <span className="flex-1 text-left">Employees</span>
                 </button>
                 )}
@@ -684,7 +806,7 @@ const HRISManagement = () => {
                 )}
                 {canAccessPage('201-travel') && (
                   <button onClick={() => { setActiveTab('201-travel'); setActiveSubTab(''); }} className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-200 ${activeTab === '201-travel' ? 'bg-green-50 text-green-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
-                    <span className="mr-2">🧳</span>
+                    <span className="mr-2">🚌</span>
                     <span className="flex-1 text-left">Travel</span>
                   </button>
                 )}
@@ -825,7 +947,7 @@ const HRISManagement = () => {
               onClick={() => handleTabClick('system-setup', true)}
               className="w-full flex items-center px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 rounded-md"
             >
-              <span className="mr-2">🔧</span>
+              <span className="mr-2">⚙</span>
               <span className="flex-1 text-left">System Setup</span>
               <svg 
                 className={`w-3 h-3 transition-transform duration-200 ${systemExpanded ? 'rotate-90' : ''}`}

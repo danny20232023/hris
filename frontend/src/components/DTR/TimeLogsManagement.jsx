@@ -5442,7 +5442,7 @@ const hasMissingTimeLogs = (row, shiftSchedule) => {
                                     onClick={() => openFixTimeModal(row)}
                                     disabled={permissionsLoading}
                                   >
-                                    <span role="img" aria-label="Fix Time">🔧</span>
+                                    <span role="img" aria-label="Fix Time">🛠️</span>
                                   </button>
                                 ) : null}
                               </div>

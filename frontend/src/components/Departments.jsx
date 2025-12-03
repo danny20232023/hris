@@ -22,6 +22,7 @@ function Departments() {
     isdepartment: 1,
     emp_objid: null,
     officehead: '',
+    designationtype: '',
     accountcode: ''
   });
   const [searchTerm, setSearchTerm] = useState('');
@@ -159,13 +160,34 @@ function Departments() {
   }, [employeeSearch, allEmployees]);
 
   // Handle employee selection
-  const handleEmployeeSelect = (employee) => {
+  const handleEmployeeSelect = async (employee) => {
     setSelectedEmployee(employee);
     const formattedName = formatOfficeHeadName(employee);
+    
+    // Fetch employee's current designation to auto-fill designationtype
+    let designationName = '';
+    try {
+      const designationResponse = await api.get('/employee-designations', {
+        params: {
+          emp_objid: employee.objid,
+          status: 'active' // Only get active (ispresent=1) designation
+        }
+      });
+      
+      const designations = designationResponse.data?.data || [];
+      if (designations.length > 0 && designations[0].rankname) {
+        designationName = designations[0].rankname;
+      }
+    } catch (error) {
+      console.error('Error fetching employee designation:', error);
+      // Continue without designation if fetch fails
+    }
+    
     setFormData(prev => ({
       ...prev,
       emp_objid: employee.objid,
-      officehead: formattedName
+      officehead: formattedName,
+      designationtype: designationName
     }));
     setEmployeeSearch('');
     setFilteredEmployees([]);
@@ -177,7 +199,8 @@ function Departments() {
     setFormData(prev => ({
       ...prev,
       emp_objid: null,
-      officehead: ''
+      officehead: '',
+      designationtype: ''
     }));
     setEmployeeSearch('');
   };
@@ -482,6 +505,7 @@ function Departments() {
         isdepartment: Number(formData.isdepartment) === 1 ? 1 : 0,
         emp_objid: formData.emp_objid || null,
         officehead: formData.officehead?.trim() || null,
+        designationtype: formData.designationtype?.trim() || null,
         accountcode: formData.accountcode?.trim() || null
       };
 
@@ -497,6 +521,7 @@ function Departments() {
           isdepartment: 1,
           emp_objid: null,
           officehead: '',
+          designationtype: '',
           accountcode: ''
         });
         setSelectedEmployee(null);
@@ -531,6 +556,7 @@ function Departments() {
         isdepartment: Number(formData.isdepartment) === 1 ? 1 : 0,
         emp_objid: formData.emp_objid || null,
         officehead: formData.officehead?.trim() || null,
+        designationtype: formData.designationtype?.trim() || null,
         accountcode: formData.accountcode?.trim() || null
       };
 
@@ -547,6 +573,7 @@ function Departments() {
           isdepartment: 1,
           emp_objid: null,
           officehead: '',
+          designationtype: '',
           accountcode: ''
         });
         setSelectedEmployee(null);
@@ -631,6 +658,7 @@ function Departments() {
       isdepartment: department.isdepartment ?? 1,
       emp_objid: department.emp_objid || null,
       officehead: department.officehead || '',
+      designationtype: department.designationtype || '',
       accountcode: department.accountcode || ''
     });
     setShowEditModal(true);
@@ -651,6 +679,7 @@ function Departments() {
       isdepartment: 1,
       emp_objid: null,
       officehead: '',
+      designationtype: '',
       accountcode: ''
     });
   };
@@ -675,6 +704,7 @@ function Departments() {
       isdepartment: 1,
       emp_objid: null,
       officehead: '',
+      designationtype: '',
       accountcode: ''
     });
     setSelectedEmployee(null);
@@ -1014,6 +1044,21 @@ function Departments() {
                   />
                 </div>
 
+                {/* Designation */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Designation
+                  </label>
+                  <input
+                    type="text"
+                    name="designationtype"
+                    value={formData.designationtype}
+                    onChange={handleInputChange}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter designation type"
+                  />
+                </div>
+
                 {/* Account Code */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1261,6 +1306,21 @@ function Departments() {
                     onChange={handleInputChange}
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Office head name (auto-filled when employee selected)"
+                  />
+                </div>
+
+                {/* Designation */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Designation
+                  </label>
+                  <input
+                    type="text"
+                    name="designationtype"
+                    value={formData.designationtype}
+                    onChange={handleInputChange}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter designation type"
                   />
                 </div>
 

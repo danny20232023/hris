@@ -69,39 +69,56 @@ const LocatorModal = ({ isOpen, onClose, onSaved, initial, emp }) => {
     return { hours: '', minutes: '' };
   };
 
-  // Get time values for form
-  const departureTimeValues = parseTime(form.loctimedeparture);
-  const arrivalTimeValues = parseTime(form.loctimearrival);
+  // Separate state for time dropdown values to maintain selection
+  const [departureTimeValues, setDepartureTimeValues] = useState({ hours: '', minutes: '' });
+  const [arrivalTimeValues, setArrivalTimeValues] = useState({ hours: '', minutes: '' });
 
   // Generate time options for 24-hour format
   const hours = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
   const minutes = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
 
+  // Initialize time values from form when modal opens or form changes
+  useEffect(() => {
+    if (isOpen) {
+      const depValues = parseTime(form.loctimedeparture);
+      const arrValues = parseTime(form.loctimearrival);
+      setDepartureTimeValues(depValues);
+      setArrivalTimeValues(arrValues);
+    }
+  }, [isOpen, form.loctimedeparture, form.loctimearrival]);
+
   // Handle time change
   const handleTimeChange = (field, type, value) => {
-    setForm((f) => {
-      const currentTimeStr = f[field] || '';
-      const currentValues = parseTime(currentTimeStr);
-      const newValues = { ...currentValues, [type]: value };
-      
-      if (newValues.hours && newValues.minutes) {
-        const timeString = `${newValues.hours}:${newValues.minutes}`;
-        return { ...f, [field]: timeString };
-      } else if (!newValues.hours && !newValues.minutes) {
-        return { ...f, [field]: '' };
-      } else {
-        // Keep partial time in form state (for validation purposes)
-        const timeString = newValues.hours && newValues.minutes 
-          ? `${newValues.hours}:${newValues.minutes}` 
-          : '';
-        return { ...f, [field]: timeString };
-      }
-    });
+    if (field === 'loctimedeparture') {
+      setDepartureTimeValues(prev => {
+        const newValues = { ...prev, [type]: value };
+        // Update form field only when both hours and minutes are selected
+        if (newValues.hours && newValues.minutes) {
+          const timeString = `${newValues.hours}:${newValues.minutes}`;
+          setForm(f => ({ ...f, loctimedeparture: timeString }));
+        } else if (!newValues.hours && !newValues.minutes) {
+          setForm(f => ({ ...f, loctimedeparture: '' }));
+        }
+        return newValues;
+      });
+    } else if (field === 'loctimearrival') {
+      setArrivalTimeValues(prev => {
+        const newValues = { ...prev, [type]: value };
+        // Update form field only when both hours and minutes are selected
+        if (newValues.hours && newValues.minutes) {
+          const timeString = `${newValues.hours}:${newValues.minutes}`;
+          setForm(f => ({ ...f, loctimearrival: timeString }));
+        } else if (!newValues.hours && !newValues.minutes) {
+          setForm(f => ({ ...f, loctimearrival: '' }));
+        }
+        return newValues;
+      });
+    }
   };
 
   useEffect(() => {
     if (isOpen) {
-      setForm({
+      const newForm = {
         emp_objid: initial?.emp_objid || emp?.objid || '',
         locpurpose: initial?.locpurpose || '',
         locatordate: initial?.locatordate ? String(initial.locatordate).slice(0,10) : '',
@@ -109,7 +126,11 @@ const LocatorModal = ({ isOpen, onClose, onSaved, initial, emp }) => {
         loctimedeparture: extractTimeValue(initial?.loctimedeparture),
         loctimearrival: extractTimeValue(initial?.loctimearrival),
         locstatus: initial?.locstatus || 'For Approval'
-      });
+      };
+      setForm(newForm);
+      // Initialize time dropdown values
+      setDepartureTimeValues(parseTime(newForm.loctimedeparture));
+      setArrivalTimeValues(parseTime(newForm.loctimearrival));
     }
   }, [isOpen, initial, emp]);
 

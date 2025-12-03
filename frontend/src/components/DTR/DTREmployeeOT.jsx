@@ -88,7 +88,7 @@ const statusBadgeClass = (status) => {
 
 const DTREmployeeOT = () => {
   const { can, loading: permissionsLoading } = usePermissions();
-  const COMPONENT_ID = 'dtr-overtime-employee';
+  const COMPONENT_ID = 'dtr-employee-ot';
   const componentPermissions = useMemo(
     () => ({
       read: can(COMPONENT_ID, 'read'),

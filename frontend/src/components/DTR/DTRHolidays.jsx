@@ -240,6 +240,12 @@ const DTRHolidays = () => {
   const [holidayTypes, setHolidayTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filterYear, setFilterYear] = useState('');
+  const [filterCategory, setFilterCategory] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const [filterRecurring, setFilterRecurring] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [showHolidayModal, setShowHolidayModal] = useState(false);
   const [showTypeModal, setShowTypeModal] = useState(false);
   const [editHoliday, setEditHoliday] = useState(null);
@@ -275,15 +281,83 @@ const DTRHolidays = () => {
     init();
   }, [canRead, permissionsLoading]);
 
+  // Extract unique years from holidays for the year filter
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    holidays.forEach(h => {
+      if (h.holidaydate) {
+        try {
+          const d = new Date(h.holidaydate);
+          if (!isNaN(d.getTime())) {
+            years.add(d.getFullYear());
+          }
+        } catch (e) {
+          // Ignore invalid dates
+        }
+      }
+    });
+    return Array.from(years).sort((a, b) => b - a); // Sort descending (newest first)
+  }, [holidays]);
+
   const filteredHolidays = useMemo(() => {
     const q = (search || '').toLowerCase();
     return (holidays || []).filter(h => {
+      // Search filter
       const name = (h.holidayname || '').toLowerCase();
       const cat = (h.holidaycategory || '').toLowerCase();
       const typeName = (h.holiday_type_name || '').toLowerCase();
-      return name.includes(q) || cat.includes(q) || typeName.includes(q);
+      const matchesSearch = !q || name.includes(q) || cat.includes(q) || typeName.includes(q);
+      
+      // Year filter
+      let matchesYear = true;
+      if (filterYear) {
+        if (h.holidaydate) {
+          try {
+            const d = new Date(h.holidaydate);
+            if (!isNaN(d.getTime())) {
+              matchesYear = d.getFullYear() === parseInt(filterYear, 10);
+            } else {
+              matchesYear = false;
+            }
+          } catch (e) {
+            matchesYear = false;
+          }
+        } else {
+          matchesYear = false;
+        }
+      }
+      
+      // Category filter
+      const matchesCategory = !filterCategory || h.holidaycategory === filterCategory;
+      
+      // Type filter
+      const matchesType = !filterType || String(h.holidaytype) === String(filterType);
+      
+      // Recurring filter
+      const isRecurring = h.isrecurring === 1;
+      const matchesRecurring = filterRecurring === '' || 
+        (filterRecurring === 'yes' && isRecurring) || 
+        (filterRecurring === 'no' && !isRecurring);
+      
+      return matchesSearch && matchesYear && matchesCategory && matchesType && matchesRecurring;
     });
-  }, [holidays, search]);
+  }, [holidays, search, filterYear, filterCategory, filterType, filterRecurring]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredHolidays.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedHolidays = filteredHolidays.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterYear, filterCategory, filterType, filterRecurring]);
+
+  // Reset to page 1 when items per page changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
 
   const filteredTypes = useMemo(() => {
     const q = (search || '').toLowerCase();
@@ -356,15 +430,25 @@ const DTRHolidays = () => {
     }
   };
 
-  const formatDate = (dateStr) => {
+  const formatDate = (dateStr, isRecurring = false) => {
     if (!dateStr) return '';
     try {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return dateStr;
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      
+      // Month abbreviations
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthAbbr = monthNames[d.getMonth()];
       const dd = String(d.getDate()).padStart(2, '0');
+      
+      // If recurring, show only month/day (exclude year) - format: "Dec/30"
+      if (isRecurring) {
+        return `${monthAbbr}/${dd}`;
+      }
+      
+      // For non-recurring, show month/day/year - format: "Dec/30/2024"
       const yyyy = d.getFullYear();
-      return `${mm}/${dd}/${yyyy}`;
+      return `${monthAbbr}/${dd}/${yyyy}`;
     } catch {
       return dateStr;
     }
@@ -415,57 +499,130 @@ const DTRHolidays = () => {
 
       {activeTab === 'holidays' && (
         <div className="mt-4">
-          <div className="bg-white rounded-lg shadow p-4 mb-4 flex items-end gap-3">
-            <div className="flex-1">
-              <label className="block text-sm text-gray-600 mb-1">Search holiday</label>
-              <input
-                className="w-full px-3 py-2 border rounded text-sm"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, category, or type..."
-              />
+          <div className="bg-white rounded-lg shadow p-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-3">
+              <div className="md:col-span-2">
+                <label className="block text-sm text-gray-600 mb-1">Search holiday</label>
+                <input
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name, category, or type..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Year</label>
+                <select
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  value={filterYear}
+                  onChange={(e) => setFilterYear(e.target.value)}
+                >
+                  <option value="">All Years</option>
+                  {availableYears.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Category</label>
+                <select
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                >
+                  <option value="">All Categories</option>
+                  <option value="Local">Local</option>
+                  <option value="National">National</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Type</label>
+                <select
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                >
+                  <option value="">All Types</option>
+                  {holidayTypes.map(t => (
+                    <option key={t.id} value={t.id}>{t.typesname}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Recurring</label>
+                <select
+                  className="w-full px-3 py-2 border rounded text-sm"
+                  value={filterRecurring}
+                  onChange={(e) => setFilterRecurring(e.target.value)}
+                >
+                  <option value="">All</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
             </div>
-            {canCreate ? (
-              <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" onClick={openAddHoliday}>
-                + Add Holiday
-              </button>
-            ) : (
-              <span className="text-xs text-gray-400 italic pb-2">No create permission</span>
-            )}
+            <div className="flex items-end gap-3">
+              <div className="flex-1"></div>
+              {(filterCategory || filterType || filterRecurring || filterYear || search) && (
+                <button
+                  className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border rounded"
+                  onClick={() => {
+                    setSearch('');
+                    setFilterYear('');
+                    setFilterCategory('');
+                    setFilterType('');
+                    setFilterRecurring('');
+                    setCurrentPage(1);
+                  }}
+                >
+                  Clear Filters
+                </button>
+              )}
+              {canCreate ? (
+                <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" onClick={openAddHoliday}>
+                  + Add Holiday
+                </button>
+              ) : (
+                <span className="text-xs text-gray-400 italic pb-2">No create permission</span>
+              )}
+            </div>
           </div>
 
           {loading ? (
             <div className="text-center py-10">Loading…</div>
           ) : (
-            <div className="bg-white rounded-lg shadow overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Holiday Name</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Recurring</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Created By</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredHolidays.length === 0 ? (
+            <>
+              <div className="bg-white rounded-lg shadow overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
-                        No holidays found
-                      </td>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Holiday Name</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Recurring</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Created By</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                     </tr>
-                  ) : (
-                    filteredHolidays.map((h) => (
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredHolidays.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                          No holidays found
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedHolidays.map((h) => (
                       <tr key={h.id}>
                         <td className="px-4 py-2">{h.holidayname}</td>
                         <td className="px-4 py-2">{h.holidaycategory}</td>
                         <td className="px-4 py-2">{h.holiday_type_name || '—'}</td>
-                        <td className="px-4 py-2">{h.holidaydate ? formatDate(h.holidaydate) : '—'}</td>
+                        <td className="px-4 py-2">
+                          {h.holidaydate ? formatDate(h.holidaydate, h.isrecurring === 1) : '—'}
+                        </td>
                         <td className="px-4 py-2">{h.holidaydesc || '—'}</td>
                         <td className="px-4 py-2"><RecurringBadge isRecurring={h.isrecurring === 1} /></td>
                         <td className="px-4 py-2"><StatusBadge status={h.status} /></td>
@@ -507,6 +664,83 @@ const DTRHolidays = () => {
                 </tbody>
               </table>
             </div>
+            
+            {/* Pagination Controls */}
+            {filteredHolidays.length > 0 && (
+              <div className="bg-white rounded-lg shadow p-4 mt-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  {/* Items per page selector */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-gray-600">Show:</label>
+                    <select
+                      className="px-3 py-1 border rounded text-sm"
+                      value={itemsPerPage}
+                      onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                    >
+                      <option value={10}>10</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                    <span className="text-sm text-gray-600">per page</span>
+                  </div>
+
+                  {/* Pagination info */}
+                  <div className="text-sm text-gray-600">
+                    Showing {startIndex + 1} to {Math.min(endIndex, filteredHolidays.length)} of {filteredHolidays.length} holidays
+                  </div>
+
+                  {/* Pagination buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </button>
+                    
+                    {/* Page numbers */}
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        
+                        return (
+                          <button
+                            key={pageNum}
+                            className={`px-3 py-1 border rounded text-sm ${
+                              currentPage === pageNum
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'hover:bg-gray-50'
+                            }`}
+                            onClick={() => setCurrentPage(pageNum)}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
           )}
         </div>
       )}

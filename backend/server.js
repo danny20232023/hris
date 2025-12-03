@@ -42,6 +42,7 @@ import dtrEmployeeCdoRoutes from './routes/DTREmployeecdoRoutes.js';
 import dtrEmployeeOTroutes from './routes/DTREmployeeOTroutes.js';
 import dtrFixChecktimeRoutes from './routes/DTRFixChecktimeRoutes.js';
 import changeNotificationRoutes from './routes/changeNotificationRoutes.js'; // Change Notification Routes
+import adminApprovalRoutes from './routes/adminApprovalRoutes.js'; // Admin Approval Dashboard Routes
 import computedDTRRoutes from './routes/computedDTRRoutes.js'; // Computed DTR Routes
 import printDTRModalRoutes from './routes/printDTRModalRoutes.js'; // Print DTR Modal Routes
 
@@ -160,6 +161,7 @@ app.use('/api/dtr/employee-cdo', dtrEmployeeCdoRoutes);
 app.use('/api/dtr/employee-ot', dtrEmployeeOTroutes);
 app.use('/api/dtr-fix-checktime', dtrFixChecktimeRoutes);
 app.use('/api/change-notifications', changeNotificationRoutes); // Change Notifications
+app.use('/api/admin-approvals', adminApprovalRoutes); // Admin Approval Dashboard Routes
 app.use('/api/computed-dtr', computedDTRRoutes); // Computed DTR Routes
 app.use('/api/print-dtr-modal', printDTRModalRoutes); // Print DTR Modal Routes
 
@@ -235,7 +237,19 @@ app.use('*', (req, res) => {
     console.log('🔄 Initializing database connections...');
     
     // Connect to databases with retry logic
+    // SQL Server connection (optional if DB_OPTIONAL=true)
+    try {
     await connectDB();
+    } catch (error) {
+      if (process.env.DB_OPTIONAL === 'true') {
+        console.warn('⚠️  SQL Server connection failed, but continuing (DB_OPTIONAL=true)');
+      } else {
+        console.error('❌ SQL Server connection is required. Set DB_OPTIONAL=true in .env to make it optional.');
+        throw error;
+      }
+    }
+    
+    // MySQL HR201 database connection (required)
     await initHR201Database();
     
     // Initialize media storage paths (after database is ready)

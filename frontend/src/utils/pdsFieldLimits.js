@@ -69,7 +69,7 @@ export const PDS_FIELD_LIMITS = {
   
   // Education
   education_level: 25, // Backend truncation: substring(0, 25)
-  education_school_name: 25, // Backend truncation: substring(0, 25)
+  education_school_name: null, // No limit - database field is TEXT type
   education_degree_course: 50, // Backend truncation: substring(0, 50)
   education_highest_level_units: 15, // Backend truncation: substring(0, 15)
   education_scholarship_honors: 25, // Backend truncation: substring(0, 25)

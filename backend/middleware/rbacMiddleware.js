@@ -68,7 +68,7 @@ export const checkPermission = async (req, componentName, action) => {
     
     // Then, fetch permissions from sysusers_roles table using componentId
     const [permissionRows] = await pool.execute(
-      `SELECT canread, cancreate, canupdate, candelete
+      `SELECT canread, cancreate, canupdate, candelete, canapprove, canreturn, cancancel
        FROM sysusers_roles
        WHERE sysroleid = ? AND component = ? LIMIT 1`,
       [usertype, componentId]
@@ -86,7 +86,10 @@ export const checkPermission = async (req, componentName, action) => {
       'read': perm.canread,
       'create': perm.cancreate,
       'update': perm.canupdate,
-      'delete': perm.candelete
+      'delete': perm.candelete,
+      'approve': perm.canapprove,
+      'return': perm.canreturn,
+      'cancel': perm.cancancel
     };
     
     const allowed = actionMap[action] === 1;
@@ -210,6 +213,37 @@ export const requirePermissionOr = (componentName, action1, action2) => {
         message: 'Forbidden: Insufficient permissions',
         component: componentName,
         required: `${action1} OR ${action2}`
+      });
+    } catch (error) {
+      console.error('[RBAC] Permission middleware error:', error);
+      return res.status(500).json({ 
+        success: false,
+        message: 'Error checking permissions',
+        error: error.message 
+      });
+    }
+  };
+};
+
+/**
+ * Express middleware to require permission for either of two components
+ * @param {string} componentName1 - First component name (e.g., 'dtr-ot-transactions')
+ * @param {string} componentName2 - Second component name (e.g., 'dtr-compute-ot')
+ * @param {string} action - Action: 'read', 'create', 'update', 'delete'
+ * @returns {Function} Express middleware
+ */
+export const requirePermissionForEither = (componentName1, componentName2, action) => {
+  return async (req, res, next) => {
+    try {
+      const allowed1 = await checkPermission(req, componentName1, action);
+      const allowed2 = await checkPermission(req, componentName2, action);
+      if (allowed1 || allowed2) {
+        return next();
+      }
+      return res.status(403).json({ 
+        success: false,
+        message: 'Forbidden: Insufficient permissions',
+        required: `${componentName1} OR ${componentName2} with ${action} permission`
       });
     } catch (error) {
       console.error('[RBAC] Permission middleware error:', error);

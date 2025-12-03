@@ -917,7 +917,7 @@ const EmployeeTravel = () => {
                           <td className="px-4 py-2">
                             <div className="flex items-center gap-2 flex-wrap">
                               {(r.employees || []).map((emp, idx) => {
-                                const hasPhoto = emp.photo_path && (emp.photo_path.startsWith('data:') || emp.photo_path.startsWith('http'));
+                                const hasPhoto = emp.photo_path && typeof emp.photo_path === 'string' && (emp.photo_path.startsWith('data:') || emp.photo_path.startsWith('http'));
                                 return (
                                   <div
                                     key={emp.objid || idx}

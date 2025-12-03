@@ -3,6 +3,7 @@ import { getDb } from '../config/db.js';
 import sql from 'mssql';
 import { saveMediaFile, deleteMediaFile, readMediaAsBase64, fileExists } from '../utils/fileStorage.js';
 import { v4 as uuidv4 } from 'uuid';
+import { calculatePDSProgress } from './201EmployeeController.js';
 
 // GET /api/pds-dtrchecker/me - Get PDS data for logged-in user
 export const getPDSForCurrentUser = async (req, res) => {
@@ -1643,8 +1644,20 @@ export const savePDSForCurrentUser = async (req, res) => {
         await connection.query('COMMIT');
         connection.release();
 
+        // Calculate and update PDS completeness progress
+        const progressPercent = await calculatePDSProgress(employeeObjId);
+        await pool.execute(
+          'UPDATE employees SET pdscompleprogress = ? WHERE objid = ?',
+          [progressPercent, employeeObjId]
+        );
+        console.log(`✅ [PdsDtrChecker] Updated PDS completeness: ${progressPercent}%`);
+
         console.log(`✅ [PdsDtrChecker] PDS saved successfully for user ${userId}`);
-        res.json({ success: true, message: 'PDS saved successfully' });
+        res.json({ 
+          success: true, 
+          message: 'PDS saved successfully',
+          progress: progressPercent  // Include progress in response
+        });
 
       } catch (error) {
         await connection.query('ROLLBACK');

@@ -38,9 +38,11 @@ const normalizeEmployeeName = (emp) => {
   if (!last && !first) return null;
   const upperLast = last.toUpperCase();
   const upperFirst = first.toUpperCase();
+  const departmentshortname = emp?.departmentshortname || '';
   return {
     boldHtml: `<strong>${upperLast}${upperFirst ? `, ${upperFirst}` : ''}</strong>`,
     plainText: `${upperLast}${upperFirst ? `, ${upperFirst}` : ''}`,
+    departmentshortname: departmentshortname,
   };
 };
 
@@ -260,6 +262,15 @@ const TravelPrintTemplate = ({ travel, company, meta }) => (
           text-align: justify;
           margin-bottom: 1rem;
         }
+        .employee-list {
+          font-size: 12pt;
+          margin-top: 1rem;
+          margin-left: 1.5rem;
+          margin-bottom: 1rem;
+        }
+        .employee-list div {
+          margin-bottom: 0.5rem;
+        }
         .issued {
           font-size: 12pt;
           margin-top: 2rem;
@@ -360,18 +371,48 @@ const TravelPrintTemplate = ({ travel, company, meta }) => (
         <div className="title">AUTHORIZATION TO TRAVEL</div>
         <div className="subheading left">TO WHOM IT MAY CONCERN</div>
         <p className="body-text">
-          This is to authorize{' '}
-          {meta.employeeNamesHtml ? (
-            <span dangerouslySetInnerHTML={{ __html: meta.employeeNamesHtml }} />
+          This is to authorize the following personnel to travel on official business on{' '}
+          {meta.datesSentence || '________________'}.{' '}
+          {meta.purposeText ? (
+            <span dangerouslySetInnerHTML={{ __html: meta.purposeText }} />
           ) : (
             '________________'
           )}{' '}
-          to travel on official business on {meta.datesSentence || '________________'}.{' '}
-          {meta.purposeText || '________________'} at {travel.traveldestination || '________________'}.
+          at {travel.traveldestination || '________________'}.
         </p>
+        <div className="employee-list">
+          {travel?.employees && Array.isArray(travel.employees) && travel.employees.length > 0 ? (
+            travel.employees.map((emp, index) => {
+              const normalized = normalizeEmployeeName(emp);
+              if (!normalized) return null;
+              const deptName = normalized.departmentshortname ? ` (${normalized.departmentshortname})` : '';
+              return (
+                <div key={index}>
+                  {index + 1}. {normalized.plainText}{deptName}
+                </div>
+              );
+            })
+          ) : (
+            <div style={{ fontStyle: 'italic', color: '#666' }}>
+              1. ________________
+            </div>
+          )}
+        </div>
         <p className="issued">
           Issued this {meta.issueDate || formatIssueDate(new Date())} at {meta.issuePlace || '________________'}.
         </p>
+        <div className="department-head-signature" style={{ marginTop: '2rem', display: 'inline-block', width: 'fit-content' }}>
+          <div style={{ textAlign: 'center', width: '100%' }}>
+            <div style={{ fontSize: '12pt', fontWeight: 700, textTransform: 'uppercase' }}>
+              {meta.departmentHead || '_____________'}
+            </div>
+            {meta.designationType && (
+              <div style={{ fontSize: '11pt', marginTop: '0.25rem', textAlign: 'center' }}>
+                {meta.designationType}
+              </div>
+            )}
+          </div>
+        </div>
         <div className="signature" align="right">
           {meta.mayorEsig ? <img src={meta.mayorEsig} alt="Mayor Electronic Signature" /> : null}
           <div className="signature-text">
@@ -454,16 +495,31 @@ const buildMeta = (travel, company, qrDataUrl) => {
   const datesSentence = formatDatesSentence(travelDatesArray);
   const datesList = travelDatesArray.map((d) => formatLongDate(d)).filter(Boolean).join('; ');
 
-  const purposeText = stripHtml(travel?.purpose).replace(/\s+/g, ' ').trim();
-  const purposeSentence = purposeText
-    ? purposeText.endsWith('.')
-      ? purposeText
-      : `${purposeText}.`
+  const purposeText = travel?.purpose || ''; // Keep HTML formatting if present
+  const purposePlain = stripHtml(travel?.purpose).replace(/\s+/g, ' ').trim();
+  const purposeSentence = purposePlain
+    ? purposePlain.endsWith('.')
+      ? purposePlain
+      : `${purposePlain}.`
     : '';
 
   const issueDate = formatIssueDate(travel?.createddate);
   const mayorTitle = resolveMayorTitle(company?.lguType);
   const officeTitle = resolveOfficeTitle(company?.lguType);
+
+  // Get department head and designation type from first employee's department
+  const firstEmployee = travel?.employees && Array.isArray(travel.employees) && travel.employees.length > 0
+    ? travel.employees[0]
+    : null;
+  const departmentHead = firstEmployee?.officehead || '';
+  const designationType = firstEmployee?.designationtype || '';
+  
+  // Debug: Log to verify officehead and designationtype are available
+  if (firstEmployee) {
+    console.log('[Travel Print] First employee:', firstEmployee);
+    console.log('[Travel Print] Office head:', departmentHead);
+    console.log('[Travel Print] Designation type:', designationType);
+  }
 
   return {
     logoSrc: company?.logoPreview || '',
@@ -472,7 +528,8 @@ const buildMeta = (travel, company, qrDataUrl) => {
     employeeNamesPlain: namesPlain,
     datesSentence,
     datesList,
-    purposeText,
+    purposeText, // HTML version
+    purposePlain, // Plain text version
     purposeSentence,
     issueDate,
     issuePlace: company?.lguAddress || company?.lguName || '',
@@ -481,6 +538,8 @@ const buildMeta = (travel, company, qrDataUrl) => {
     headerLocation: company?.lguAddress || '',
     qrDataUrl: qrDataUrl || '',
     isApproved: String(travel?.travelstatus || '').toLowerCase() === 'approved',
+    departmentHead,
+    designationType,
   };
 };
 

@@ -203,8 +203,12 @@ const statusBadgeClass = (status) => {
 const isForApprovalStatus = (status) => (status || '').toUpperCase() === 'FOR APPROVAL';
 
 const DtrOTTransactions = () => {
-  const { can, loading: permissionsLoading } = usePermissions();
-  const COMPONENT_ID = 'dtr-overtime-transactions';
+  const { can, canAccessPage, loading: permissionsLoading } = usePermissions();
+  const COMPONENT_ID = 'dtr-ot-transactions'; // Match the permissionId in DTROTtab
+  
+  // Check menu visibility first (canaccesspage=1)
+  const canViewPage = canAccessPage(COMPONENT_ID);
+  
   const componentPermissions = useMemo(
     () => ({
       read: can(COMPONENT_ID, 'read'),
@@ -214,6 +218,7 @@ const DtrOTTransactions = () => {
       approve: can(COMPONENT_ID, 'approve'),
       return: can(COMPONENT_ID, 'return'),
       cancel: can(COMPONENT_ID, 'cancel'),
+      print: can(COMPONENT_ID, 'print'),
     }),
     [can]
   );
@@ -226,6 +231,7 @@ const DtrOTTransactions = () => {
     approve: canApprove,
     return: canReturn,
     cancel: canCancel,
+    print: canPrint,
   } = componentPermissions;
 
   const [loading, setLoading] = useState(false);
@@ -616,6 +622,16 @@ const DtrOTTransactions = () => {
     );
   }
 
+  // Early return if no page access (canaccesspage=0)
+  if (!permissionsLoading && !canViewPage) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border border-red-100 p-6 text-center text-red-600">
+        You do not have permission to access this page (canaccesspage=0).
+      </div>
+    );
+  }
+
+  // Early return if no read permission
   if (!canRead) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-red-100 p-6 text-center text-red-600">

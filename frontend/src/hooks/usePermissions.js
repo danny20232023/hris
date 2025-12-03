@@ -190,15 +190,18 @@ export const usePermissions = () => {
       // Handle both boolean true and number 1
       const result = componentPerms.canaccesspage === true || componentPerms.canaccesspage === 1;
       if (!result) {
-        console.log(`[Frontend] canAccessPage(${componentName}): canaccesspage is false`, componentPerms);
+        console.log(`[Frontend] canAccessPage(${componentName}): canaccesspage is false/0 - access denied`, componentPerms);
       } else if (componentName === 'dtr-cdo' || componentName === 'dtr-fix-checktimes' || componentName === 'compute-attendance-report') {
         console.log(`[Frontend] ✅ canAccessPage('${componentName}'): TRUE`, componentPerms);
       }
+      // Strictly return the canaccesspage value - if it's 0/false, deny access
       return result;
     }
 
-    // If has any permission, assume page is accessible
-    return Array.isArray(componentPerms) ? componentPerms.length > 0 : Object.keys(componentPerms).length > 0;
+    // If canaccesspage is not present in permissions, deny access (strict check)
+    // Don't fall back to checking other permissions - canaccesspage must be explicitly set to 1/true
+    console.log(`[Frontend] canAccessPage(${componentName}): canaccesspage not found in permissions - access denied`, componentPerms);
+    return false;
   }, [permissions, usertype]);
 
   /**

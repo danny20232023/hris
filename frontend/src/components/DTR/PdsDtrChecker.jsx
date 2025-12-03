@@ -2264,13 +2264,7 @@ const PdsDtrChecker = ({ onBack, onSave }) => {
 
     // Validate education fields
     education.forEach((edu, index) => {
-      if (edu.school_name) {
-        const validation = validateFieldLength('education_school_name', edu.school_name);
-        if (!validation.valid) {
-          validationErrors[`education_${index}_school_name`] = validation.error;
-          hasErrors = true;
-        }
-      }
+      // school_name has no limit - database field is TEXT type
       if (edu.degree_course) {
         const validation = validateFieldLength('education_degree_course', edu.degree_course);
         if (!validation.valid) {
