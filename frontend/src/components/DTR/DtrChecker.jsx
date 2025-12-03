@@ -8,10 +8,12 @@ import MyLeaveRecords from './MyLeaveRecords';
 import MyLeaveTransactions from './myDTRChecker_201Leave';
 import MyTravelPortal from './myDTRChecker_201Travels';
 import PrintMyDTRChecker from './PrintMyDTRChecker';
+import PrintMyDTRCheckerWithAnnotations from './PrintMyDTRCheckerWithAnnotations';
 import PrintMyDTRRaw from './PrintMyDTRRaw';
 import api from '../../utils/api';
 import { getEmployeeShiftSchedule, extractTimeFromTimestamp } from '../../utils/shiftScheduleUtils';
 import MyDtrCdoCredit from './myDTRCdoCredit';
+import { openLocatorPrintWindow } from '../201/print_201EmployeeLocator';
 
 // Utility to extract "HH:mm" from a string or Date
 const getTimeOnly = (val) => {
@@ -91,6 +93,18 @@ const DtrChecker = () => {
   const [processedLogs, setProcessedLogs] = useState([]);
   const [rawLogs, setRawLogs] = useState([]);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [showPrintOptionsModal, setShowPrintOptionsModal] = useState(false);
+  const [printFormat, setPrintFormat] = useState('basic');
+  const [selectedAnnotations, setSelectedAnnotations] = useState({
+    locator: true,
+    fixlog: true,
+    leave: true,
+    travel: true,
+    cdo: true,
+    holiday: true,
+    weekend: true,
+    absent: true
+  });
   const timeoutRef = useRef();
 
   // SSN Change Modal States
@@ -1156,7 +1170,13 @@ const DtrChecker = () => {
                 {/* Print Button */}
                 <div className="flex justify-start md:justify-end items-end">
                   <button
-                    onClick={() => setShowPrintModal(true)}
+                    onClick={() => {
+                      if (selectedView === 'My Shift') {
+                        setShowPrintOptionsModal(true);
+                      } else {
+                        setShowPrintModal(true);
+                      }
+                    }}
                     className="w-10 h-10 sm:w-12 sm:h-12 bg-white text-blue-600 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-all duration-200 border border-gray-300 flex-shrink-0"
                     title="Print DTR"
                   >
@@ -1400,13 +1420,14 @@ const DtrChecker = () => {
                               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Time Departure</th>
                               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Time Arrival</th>
                               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200 text-sm">
                             {myLocatorLoading ? (
-                              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">Loading…</td></tr>
+                              <tr><td colSpan={8} className="px-4 py-6 text-center text-gray-500">Loading…</td></tr>
                             ) : (myLocatorRows || []).length === 0 ? (
-                              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">No locator records</td></tr>
+                              <tr><td colSpan={8} className="px-4 py-6 text-center text-gray-500">No locator records</td></tr>
                             ) : (
                               (myLocatorRows || []).map(r => {
                                 // Format date as MM/DD/YYYY
@@ -1467,6 +1488,15 @@ const DtrChecker = () => {
                                       <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusColor}`}>
                                         {(r.locstatus && r.locstatus.trim()) || 'For Approval'}
                                       </span>
+                                    </td>
+                                    <td className="px-4 py-2">
+                                      <button
+                                        onClick={() => openLocatorPrintWindow(r)}
+                                        className="text-green-600 hover:text-green-800 transition-colors"
+                                        title="Print Locator"
+                                      >
+                                        🖨️
+                                      </button>
                                     </td>
                                   </tr>
                                 );
@@ -1698,15 +1728,214 @@ const DtrChecker = () => {
         </div>
       )}
 
+      {/* Print Options Modal */}
+      {showPrintOptionsModal && selectedView === 'My Shift' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold mb-4">Print Options</h2>
+            
+            {/* Print Format Selection */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Print Format</label>
+              <div className="space-y-2">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="printFormat"
+                    value="basic"
+                    checked={printFormat === 'basic'}
+                    onChange={(e) => setPrintFormat(e.target.value)}
+                    className="mr-2"
+                  />
+                  <span>Basic Format</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="printFormat"
+                    value="annotations"
+                    checked={printFormat === 'annotations'}
+                    onChange={(e) => setPrintFormat(e.target.value)}
+                    className="mr-2"
+                  />
+                  <span>With Annotations</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Annotation Selection (only shown when "With Annotations" is selected) */}
+            {printFormat === 'annotations' && (
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-sm font-medium text-gray-700">Select Annotations</label>
+                  <div className="space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAnnotations({
+                          locator: true,
+                          fixlog: true,
+                          leave: true,
+                          travel: true,
+                          cdo: true,
+                          holiday: true,
+                          weekend: true,
+                          absent: true
+                        });
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAnnotations({
+                          locator: false,
+                          fixlog: false,
+                          leave: false,
+                          travel: false,
+                          cdo: false,
+                          holiday: false,
+                          weekend: false,
+                          absent: false
+                        });
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnotations.locator}
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, locator: e.target.checked })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">📌 Locator Backfill</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnotations.fixlog}
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, fixlog: e.target.checked })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">🔒 Fix Log Override</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnotations.leave}
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, leave: e.target.checked })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Leave</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnotations.travel}
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, travel: e.target.checked })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Travel</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnotations.cdo}
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, cdo: e.target.checked })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">CDO</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnotations.holiday}
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, holiday: e.target.checked })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Holiday</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnotations.weekend}
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, weekend: e.target.checked })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Weekend</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedAnnotations.absent}
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, absent: e.target.checked })}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">Absent</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setShowPrintOptionsModal(false);
+                  setPrintFormat('basic');
+                }}
+                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowPrintOptionsModal(false);
+                  setShowPrintModal(true);
+                }}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Print Modals */}
-      {showPrintModal && selectedView === 'My Shift' && (
+      {showPrintModal && selectedView === 'My Shift' && printFormat === 'basic' && (
         <PrintMyDTRChecker
           user={user}
           selectedFilter={selectedFilter}
           selectedPeriod={selectedPeriod}
           processedLogs={processedLogs}
           shiftSchedule={shiftSchedule}
-          onClose={() => setShowPrintModal(false)}
+          onClose={() => {
+            setShowPrintModal(false);
+            setPrintFormat('basic');
+          }}
+        />
+      )}
+
+      {showPrintModal && selectedView === 'My Shift' && printFormat === 'annotations' && (
+        <PrintMyDTRCheckerWithAnnotations
+          user={user}
+          selectedFilter={selectedFilter}
+          selectedPeriod={selectedPeriod}
+          processedLogs={processedLogs}
+          shiftSchedule={shiftSchedule}
+          selectedAnnotations={selectedAnnotations}
+          onClose={() => {
+            setShowPrintModal(false);
+            setPrintFormat('basic');
+          }}
         />
       )}
 

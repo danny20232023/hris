@@ -3,6 +3,7 @@ import api from '../../utils/api';
 import { useAuth } from '../../authContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { formatEmployeeName, formatEmployeeNameFromObject } from '../../utils/employeenameFormatter';
+import { openLocatorPrintWindow } from './print_201EmployeeLocator';
 
 const StatusPill = ({ status }) => {
   const color = status === 'Approved'
@@ -926,6 +927,15 @@ const EmployeeLocator = () => {
                                   setModalOpen(true);
                                 }} title="Edit Locator">
                                   ✏️
+                                </button>
+                              )}
+                              {can('201-locator', 'print') && (
+                                <button 
+                                  className="text-purple-600 hover:text-purple-800 transition-colors" 
+                                  onClick={() => openLocatorPrintWindow(r)}
+                                  title="Print Locator"
+                                >
+                                  🖨️
                                 </button>
                               )}
                               {can('201-locator', 'delete') && (

@@ -2,7 +2,7 @@ import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
 import { requirePermission } from '../middleware/rbacMiddleware.js';
 import { getHR201Pool } from '../config/hr201Database.js';
-import { listLocators, getLocatorById, createLocator, updateLocator, deleteLocator, listEmployeesForLocator } from '../controllers/201EmployeeLocatorController.js';
+import { listLocators, getLocatorById, getLocatorByIdForPrint, createLocator, updateLocator, deleteLocator, listEmployeesForLocator } from '../controllers/201EmployeeLocatorController.js';
 
 const router = express.Router();
 
@@ -50,6 +50,7 @@ const allowOwnDataOrRequirePermission = async (req, res, next) => {
 
 router.get('/', allowOwnDataOrRequirePermission, listLocators);
 router.get('/employees/list', requirePermission('201-locator', 'read'), listEmployeesForLocator);
+router.get('/:id/print', getLocatorByIdForPrint); // Print endpoint - bypasses RBAC for own records
 router.get('/:id', requirePermission('201-locator', 'read'), getLocatorById);
 // POST route - allow all authenticated users (for DtrChecker portal entries)
 router.post('/', createLocator);

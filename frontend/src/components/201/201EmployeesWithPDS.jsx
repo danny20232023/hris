@@ -42,6 +42,8 @@ const splitFullName = (fullName) => {
   const lastName = parts[0] || '';
   const remaining = parts[1] || '';
   const nameParts = remaining.split(' ').filter(Boolean);
+  // For double first names: take first word as firstName, rest as middleName
+  // This preserves the complete first name when displayed as "Last, First Middle"
   const firstName = nameParts[0] || '';
   const middleName = nameParts.slice(1).join(' ') || '';
   return { lastName, firstName, middleName };
@@ -589,8 +591,10 @@ const EmployeesWithPDS = () => {
                   <td className="px-4 py-2">
                     {(() => {
                       const formattedName = formatEmployeeNameFromString(r.fullname || '');
-                      const { lastName, firstName } = splitFullName(formattedName);
-                      const displayName = [lastName, firstName].filter(Boolean).join(', ') || formattedName || 'Employee';
+                      const { lastName, firstName, middleName } = splitFullName(formattedName);
+                      // Combine firstName and middleName to show complete first name with double names
+                      const completeFirstName = [firstName, middleName].filter(Boolean).join(' ');
+                      const displayName = [lastName, completeFirstName].filter(Boolean).join(', ') || formattedName || 'Employee';
                       const departmentPosition = [r.departmentName || '', r.positionName || ''].filter(Boolean).join(' - ');
                       return (
                         <div className="flex items-center gap-3">

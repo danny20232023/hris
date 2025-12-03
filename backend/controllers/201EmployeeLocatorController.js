@@ -112,20 +112,119 @@ export const getLocatorById = async (req, res) => {
     const pool = getHR201Pool();
     const connection = await pool.getConnection();
     const [rows] = await connection.execute(
-      `SELECT objid, emp_objid, locatorno, locpurpose, locdestination,
-       DATE_FORMAT(locatordate, '%Y-%m-%d') AS locatordate,
-       loctimedeparture, loctimearrival, locremarks, createdby, createddate,
-       updatedby, updateddate, locstatus, approvedby, approveddate, isportal
-       FROM employee_locators WHERE objid = ? LIMIT 1`,
+      `SELECT 
+        el.objid, el.emp_objid, el.locatorno, el.locpurpose, el.locdestination,
+        DATE_FORMAT(el.locatordate, '%Y-%m-%d') AS locatordate,
+        el.loctimedeparture, el.loctimearrival, el.locremarks, el.createdby, el.createddate,
+        el.updatedby, el.updateddate, el.locstatus, el.approvedby, el.approveddate, el.isportal,
+        e.surname, e.firstname, e.middlename,
+        dt.designationname AS employee_designation_name,
+        dept.departmentshortname AS employee_department_shortname,
+        dept.departmentname AS employee_department_name,
+        c.surname AS createdby_surname,
+        c.firstname AS createdby_firstname,
+        c.middlename AS createdby_middlename,
+        a.surname AS approvedby_surname,
+        a.firstname AS approvedby_firstname,
+        a.middlename AS approvedby_middlename
+      FROM employee_locators el
+      LEFT JOIN employees e ON e.objid = el.emp_objid
+      LEFT JOIN employee_designation ed ON ed.emp_objid = el.emp_objid AND ed.ispresent = 1
+      LEFT JOIN designationtypes dt ON dt.id = ed.designationid
+      LEFT JOIN department dept ON dept.deptid = ed.assigneddept
+      LEFT JOIN sysusers s ON s.id = el.createdby
+      LEFT JOIN employees c ON c.objid = s.emp_objid
+      LEFT JOIN sysusers sa ON sa.id = el.approvedby
+      LEFT JOIN employees a ON a.objid = sa.emp_objid
+      WHERE el.objid = ? LIMIT 1`,
       [req.params.id]
     );
     connection.release();
     if (!rows.length) return res.status(404).json({ success: false, message: 'Locator not found' });
     const locator = rows[0];
     locator.locstatus = normalizeLocatorStatus(locator.locstatus);
+    locator.employee_name = formatEmployeeName(locator.surname, locator.firstname, locator.middlename);
+    locator.createdby_employee_name = formatEmployeeName(locator.createdby_surname, locator.createdby_firstname, locator.createdby_middlename);
+    locator.approvedby_employee_name = locator.approvedby ? formatEmployeeName(locator.approvedby_surname, locator.approvedby_firstname, locator.approvedby_middlename) : null;
     res.json({ success: true, data: locator });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Failed to get locator', error: e.message });
+  }
+};
+
+// Print endpoint - allows users to print their own locator records without RBAC
+export const getLocatorByIdForPrint = async (req, res) => {
+  try {
+    const pool = getHR201Pool();
+    const connection = await pool.getConnection();
+    
+    // First, get the locator and check if it belongs to the logged-in user
+    const [locatorRows] = await connection.execute(
+      `SELECT el.emp_objid FROM employee_locators el WHERE el.objid = ? LIMIT 1`,
+      [req.params.id]
+    );
+    
+    if (!locatorRows.length) {
+      connection.release();
+      return res.status(404).json({ success: false, message: 'Locator not found' });
+    }
+    
+    const locatorEmpObjId = locatorRows[0].emp_objid;
+    
+    // Check if the locator belongs to the logged-in user (bypass RBAC for own records)
+    if (req.user?.USERID) {
+      const [employeeRows] = await connection.execute(
+        'SELECT objid FROM employees WHERE dtruserid = ? AND objid = ? LIMIT 1',
+        [String(req.user.USERID), locatorEmpObjId]
+      );
+      
+      // If not the user's own record, deny access
+      if (employeeRows.length === 0) {
+        connection.release();
+        return res.status(403).json({ success: false, message: 'Access denied. You can only print your own locator records.' });
+      }
+    }
+    
+    // Fetch full locator data with all joins
+    const [rows] = await connection.execute(
+      `SELECT 
+        el.objid, el.emp_objid, el.locatorno, el.locpurpose, el.locdestination,
+        DATE_FORMAT(el.locatordate, '%Y-%m-%d') AS locatordate,
+        el.loctimedeparture, el.loctimearrival, el.locremarks, el.createdby, el.createddate,
+        el.updatedby, el.updateddate, el.locstatus, el.approvedby, el.approveddate, el.isportal,
+        e.surname, e.firstname, e.middlename,
+        dt.designationname AS employee_designation_name,
+        dept.departmentshortname AS employee_department_shortname,
+        dept.departmentname AS employee_department_name,
+        c.surname AS createdby_surname,
+        c.firstname AS createdby_firstname,
+        c.middlename AS createdby_middlename,
+        a.surname AS approvedby_surname,
+        a.firstname AS approvedby_firstname,
+        a.middlename AS approvedby_middlename
+      FROM employee_locators el
+      LEFT JOIN employees e ON e.objid = el.emp_objid
+      LEFT JOIN employee_designation ed ON ed.emp_objid = el.emp_objid AND ed.ispresent = 1
+      LEFT JOIN designationtypes dt ON dt.id = ed.designationid
+      LEFT JOIN department dept ON dept.deptid = ed.assigneddept
+      LEFT JOIN sysusers s ON s.id = el.createdby
+      LEFT JOIN employees c ON c.objid = s.emp_objid
+      LEFT JOIN sysusers sa ON sa.id = el.approvedby
+      LEFT JOIN employees a ON a.objid = sa.emp_objid
+      WHERE el.objid = ? LIMIT 1`,
+      [req.params.id]
+    );
+    connection.release();
+    
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Locator not found' });
+    const locator = rows[0];
+    locator.locstatus = normalizeLocatorStatus(locator.locstatus);
+    locator.employee_name = formatEmployeeName(locator.surname, locator.firstname, locator.middlename);
+    locator.createdby_employee_name = formatEmployeeName(locator.createdby_surname, locator.createdby_firstname, locator.createdby_middlename);
+    locator.approvedby_employee_name = locator.approvedby ? formatEmployeeName(locator.approvedby_surname, locator.approvedby_firstname, locator.approvedby_middlename) : null;
+    res.json({ success: true, data: locator });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Failed to get locator for print', error: e.message });
   }
 };
 
