@@ -372,12 +372,8 @@ const TravelPrintTemplate = ({ travel, company, meta }) => (
         <div className="subheading left">TO WHOM IT MAY CONCERN</div>
         <p className="body-text">
           This is to authorize the following personnel to travel on official business on{' '}
-          {meta.datesSentence || '________________'}.{' '}
-          {meta.purposeText ? (
-            <span dangerouslySetInnerHTML={{ __html: meta.purposeText }} />
-          ) : (
-            '________________'
-          )}{' '}
+          {meta.datesSentence || '________________'}{' '}
+          {meta.purposePlain || '________________'}{' '}
           at {travel.traveldestination || '________________'}.
         </p>
         <div className="employee-list">
@@ -496,7 +492,10 @@ const buildMeta = (travel, company, qrDataUrl) => {
   const datesList = travelDatesArray.map((d) => formatLongDate(d)).filter(Boolean).join('; ');
 
   const purposeText = travel?.purpose || ''; // Keep HTML formatting if present
-  const purposePlain = stripHtml(travel?.purpose).replace(/\s+/g, ' ').trim();
+  const purposePlain = stripHtml(travel?.purpose)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\.+$/, ''); // Remove trailing periods for sentence composition
   const purposeSentence = purposePlain
     ? purposePlain.endsWith('.')
       ? purposePlain
