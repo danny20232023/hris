@@ -272,6 +272,8 @@ function ShiftSchedView_Management({ logs = [], selectedEmployee, onFetchLogs, s
   const [cdoUsageByDate, setCdoUsageByDate] = useState({});
   const [cdoDetailModalOpen, setCdoDetailModalOpen] = useState(false);
   const [selectedCdoEntry, setSelectedCdoEntry] = useState(null);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [selectedLeave, setSelectedLeave] = useState(null);
   console.log(' [SHIFT SCHED VIEW] Current leaveData state:', leaveData);
 
   // Fetch shift schedule for the selected employee
@@ -483,40 +485,23 @@ function ShiftSchedView_Management({ logs = [], selectedEmployee, onFetchLogs, s
     }).join('; ');
   };
 
-  // Helper: Get leave remarks for a specific date
+  // Helper: Get leave remarks for a specific date - returns both remarks and records
   const getLeaveRemarksForDate = (dateStr) => {
-    console.log(' [LEAVE2 DEBUG] getLeaveRemarksForDate called');
-    console.log('🔍 [LEAVE2 DEBUG] Parameters:', { 
-      dateStr, 
-      leaveDataLength: leaveData?.length, 
-      selectedEmployeeId: selectedEmployee?.USERID,
-      selectedEmployeeName: selectedEmployee?.NAME
-    });
-    
     if (!leaveData || leaveData.length === 0) {
-      console.log('❌ [LEAVE2 DEBUG] No leave data available');
-      return null;
+      return { remarks: '', records: [] };
     }
     
-    console.log('📋 [LEAVE2 DEBUG] Processing leave data:', leaveData);
-    
     const leavesForDate = leaveData.filter(leave => {
-      console.log('🔍 [LEAVE2 DEBUG] Processing leave record:', leave);
-      
       // Comprehensive date extraction and comparison
       let leaveDate;
       
       if (leave.LEAVEDATE) {
         try {
-          console.log('📅 [LEAVE2 DEBUG] Original LEAVEDATE:', leave.LEAVEDATE, 'Type:', typeof leave.LEAVEDATE);
-          
           // Create a Date object to handle all possible formats
           const dateObj = new Date(leave.LEAVEDATE);
-          console.log('📅 [LEAVE2 DEBUG] Parsed Date object:', dateObj);
           
           // Check if the date is valid
           if (isNaN(dateObj.getTime())) {
-            console.log('❌ [LEAVE2 DEBUG] Invalid date:', leave.LEAVEDATE);
             return false;
           }
           
@@ -525,64 +510,36 @@ function ShiftSchedView_Management({ logs = [], selectedEmployee, onFetchLogs, s
           const month = String(dateObj.getMonth() + 1).padStart(2, '0');
           const day = String(dateObj.getDate()).padStart(2, '0');
           leaveDate = `${year}-${month}-${day}`;
-          
-          console.log('📅 [LEAVE2 DEBUG] Date components:', { year, month, day });
-          console.log('📅 [LEAVE2 DEBUG] Final leaveDate:', leaveDate);
-          
         } catch (error) {
-          console.log('❌ [LEAVE2 DEBUG] Error parsing date:', leave.LEAVEDATE, error);
           return false;
         }
       } else {
-        console.log('❌ [LEAVE2 DEBUG] No LEAVEDATE found in record');
         return false;
       }
       
       const matchesDate = leaveDate === dateStr;
-      const matchesUser = String(leave.USERID) === String(selectedEmployee.USERID);
-      
-      console.log('🔍 [LEAVE2 DEBUG] Detailed comparison:', {
-        originalLEAVEDATE: leave.LEAVEDATE,
-        parsedLeaveDate: leaveDate,
-        gridDateStr: dateStr,
-        matchesDate,
-        leaveUserId: leave.USERID,
-        leaveUserIdType: typeof leave.USERID,
-        selectedUserId: selectedEmployee.USERID,
-        selectedUserIdType: typeof selectedEmployee.USERID,
-        matchesUser,
-        leaveType: leave.LeaveName,
-        leaveDetail: leave.LEAVEDETAIL,
-        remarks: leave.LEAVEREMARKS,
-        willInclude: matchesDate && matchesUser
-      });
+      const matchesUser = String(leave.USERID) === String(selectedEmployee?.USERID);
       
       return matchesDate && matchesUser;
     });
 
-    console.log('🔍 [LEAVE2 DEBUG] Filtered leaves for date:', leavesForDate);
-    console.log('🔍 [LEAVE2 DEBUG] Number of matching leaves:', leavesForDate.length);
-
     if (leavesForDate.length === 0) {
-      console.log('❌ [LEAVE2 DEBUG] No matching leaves found for date:', dateStr);
-      return null;
+      return { remarks: '', records: [] };
     }
     
-    const result = leavesForDate.map(leave => {
+    // Only include approved leaves (exclude "For Approval")
+    const approvedLeaves = leavesForDate.filter(leave => {
+      const status = normalizeStatusLabel(leave.LEAVESTATUS || leave.status);
+      return status === 'Approved';
+    });
+    
+    const remarks = approvedLeaves.map(leave => {
       const leaveType = leave.LeaveName || 'Leave';
-      const remarks = leave.LEAVEREMARKS || '';
-      const formattedRemark = remarks ? `Leave(${leaveType})` : leaveType;
-      
-      console.log('📝 [LEAVE2 DEBUG] Formatting leave remark:', {
-        leaveType,
-        remarks,
-        formattedRemark
-      });
-      
-      return formattedRemark;
+      const leaveRemarks = leave.LEAVEREMARKS || '';
+      return leaveRemarks ? `Leave(${leaveType})` : leaveType;
     }).join('; ');
     
-    console.log('✅ [LEAVE2 DEBUG] Final leave remarks result:', result);
+    return { remarks, records: approvedLeaves };
     return result;
   };
 
@@ -909,6 +866,18 @@ function ShiftSchedView_Management({ logs = [], selectedEmployee, onFetchLogs, s
   const closeCdoDetailModal = () => {
     setCdoDetailModalOpen(false);
     setSelectedCdoEntry(null);
+  };
+
+  // Function to open leave details modal
+  const openLeaveModal = (leave) => {
+    setSelectedLeave(leave);
+    setShowLeaveModal(true);
+  };
+
+  // Function to close leave modal
+  const closeLeaveModal = () => {
+    setShowLeaveModal(false);
+    setSelectedLeave(null);
   };
 
   // Helper to check if date has leave (for time column annotation)
@@ -1392,8 +1361,31 @@ function ShiftSchedView_Management({ logs = [], selectedEmployee, onFetchLogs, s
         return 0.0;
       })();
 
+      // Get remarks from locator, leave, travel, and holiday data
+      // Check for Travel, Leave, CDO BEFORE calculating LATE - do not compute LATE if date has these remarks
+      const holidayInfo = getHolidayDisplayForDate(holidayData, dateStr);
+      const holidaysForDate = holidayInfo?.records || [];
+      const holidayNameList = holidayInfo?.names || [];
+      const holidayDisplay = holidayInfo?.display || '';
+      const hasWorkSuspension = !!holidayInfo?.hasWorkSuspension;
+      let remarks = isWeekend(dateStr) ? 'Weekend' : '';
+      const locatorRemarks = getLocatorRemarksForDate(dateStr);
+      const leaveRemarks = getLeaveRemarksForDate(dateStr);
+      const travelRemarks = getTravelRemarksForDate(dateStr);
+      const cdoRemarksData = getCdoRemarksForDate(dateStr);
+      const cdoRemarks = cdoRemarksData.remarks;
+      const cdoRecords = cdoRemarksData.records;
+      const hasCdo = cdoRecords.length > 0;
+      const hasTravel = hasTravelForDate(dateStr);
+      const hasLeave = hasLeaveForDate(dateStr);
+
       // Calculate late minutes - only for active check-in columns
+      // DO NOT compute LATE if the date has Travel, Leave, or CDO remarks
       const calculateLate = (() => {
+        if (hasTravel || hasLeave || hasCdo) {
+          return 0; // Do not compute LATE if date has Travel, Leave, or CDO
+        }
+        
         let lateMinutes = 0;
         
         // AM_CHECKIN late calculation - only if AM check-in is active
@@ -1419,21 +1411,6 @@ function ShiftSchedView_Management({ logs = [], selectedEmployee, onFetchLogs, s
 
       console.log('📊 Day calculations:', { days: calculateDays, late: calculateLate });
 
-      // Get remarks from locator, leave, travel, and holiday data
-      const holidayInfo = getHolidayDisplayForDate(holidayData, dateStr);
-      const holidaysForDate = holidayInfo?.records || [];
-      const holidayNameList = holidayInfo?.names || [];
-      const holidayDisplay = holidayInfo?.display || '';
-      const hasWorkSuspension = !!holidayInfo?.hasWorkSuspension;
-      let remarks = isWeekend(dateStr) ? 'Weekend' : '';
-      const locatorRemarks = getLocatorRemarksForDate(dateStr);
-      const leaveRemarks = getLeaveRemarksForDate(dateStr);
-      const travelRemarks = getTravelRemarksForDate(dateStr);
-      const cdoRemarksData = getCdoRemarksForDate(dateStr);
-      const cdoRemarks = cdoRemarksData.remarks;
-      const cdoRecords = cdoRemarksData.records;
-      const hasCdo = cdoRecords.length > 0;
-
       // Combine all remarks
       const allRemarks = [locatorRemarks, leaveRemarks, travelRemarks, cdoRemarks].filter(Boolean);
       
@@ -1450,8 +1427,7 @@ function ShiftSchedView_Management({ logs = [], selectedEmployee, onFetchLogs, s
       }
 
       // Check if employee has leave or travel for time column annotations
-      const hasLeave = hasLeaveForDate(dateStr);
-      const hasTravel = hasTravelForDate(dateStr);
+      // Note: hasLeave and hasTravel are already defined above from remarks
       const hasHoliday = holidayNameList.length > 0;
 
       const locatorWindows = getApprovedLocatorWindowsForDate(locatorData, dateStr);
@@ -1489,7 +1465,8 @@ function ShiftSchedView_Management({ logs = [], selectedEmployee, onFetchLogs, s
         hasWorkSuspension,
         holidayRecords: holidaysForDate,
         locatorBackfill: locatorBackfillFlags,
-        cdoRecords
+        cdoRecords,
+        leaveRecords
       };
     });
 
@@ -1534,6 +1511,35 @@ function ShiftSchedView_Management({ logs = [], selectedEmployee, onFetchLogs, s
       } else if (normalized.startsWith('locator')) {
         color = '#ec4899';
       } else if (normalized.includes('leave')) {
+        // Make leave remarks clickable
+        const leaveRecords = Array.isArray(log?.leaveRecords) ? log.leaveRecords : [];
+        if (leaveRecords.length > 0) {
+          // Extract leave type from remark (e.g., "Leave(Vacation)" -> "Vacation")
+          const leaveTypeMatch = remark.match(/^Leave\(([^)]+)\)$/i) || remark.match(/^Leave$/i);
+          const leaveType = leaveTypeMatch ? (leaveTypeMatch[1] || '') : '';
+          
+          // Find matching leave record
+          const matchingLeave = leaveRecords.find(leave => {
+            const recordLeaveType = leave.LeaveName || leave.leave_type_name || '';
+            return !leaveType || recordLeaveType === leaveType || recordLeaveType.toLowerCase() === leaveType.toLowerCase();
+          }) || leaveRecords[0];
+          
+          if (matchingLeave) {
+            return (
+              <span key={i}>
+                <button
+                  type="button"
+                  onClick={() => openLeaveModal(matchingLeave)}
+                  className="underline cursor-pointer bg-transparent border-none p-0 text-left font-medium"
+                  style={{ color: '#7c3aed', textDecorationColor: '#7c3aed' }}
+                >
+                  {remark}
+                </button>
+                {i < arr.length - 1 && '; '}
+              </span>
+            );
+          }
+        }
         color = '#7c3aed';
       } else if (normalized.includes('travel')) {
         color = '#16a34a';
@@ -1832,9 +1838,229 @@ function ShiftSchedView_Management({ logs = [], selectedEmployee, onFetchLogs, s
           cdo={selectedCdoEntry}
         />
       )}
+
+      {showLeaveModal && selectedLeave && (
+        <LeaveDetailModal
+          isOpen={showLeaveModal}
+          onClose={closeLeaveModal}
+          leave={selectedLeave}
+          employees={[]}
+        />
+      )}
     </div>
   );
 }
+
+// Helper function to get employee name (simplified version)
+const getEmployeeNameForLeave = (userId, employees = []) => {
+  if (!userId) return 'N/A';
+  const employee = employees.find(emp => String(emp.USERID) === String(userId));
+  return employee?.NAME || 'N/A';
+};
+
+const LeaveDetailModal = ({ isOpen, onClose, leave, employees }) => {
+  if (!isOpen || !leave) return null;
+
+  const formatDateMMDDYYYY = (dateStr) => {
+    if (!dateStr) return '';
+    const trimmed = String(dateStr).trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [year, month, day] = trimmed.split('-');
+      return `${month}/${day}/${year}`;
+    }
+
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) {
+      const yyyy = parsed.getFullYear();
+      const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+      const dd = String(parsed.getDate()).padStart(2, '0');
+      return `${mm}/${dd}/${yyyy}`;
+    }
+
+    return trimmed;
+  };
+
+  const collectInclusiveDates = () => {
+    const dates = new Set();
+
+    if (Array.isArray(leave.leaveDates) && leave.leaveDates.length > 0) {
+      leave.leaveDates.forEach((item) => {
+        const raw = item?.LEAVEDATE || item?.leavedate || item;
+        if (raw) {
+          dates.add(formatDateMMDDYYYY(raw));
+        }
+      });
+    }
+
+    if (Array.isArray(leave.details) && leave.details.length > 0) {
+      leave.details.forEach((detail) => {
+        const raw = detail?.deducteddate || detail?.leavedate || detail;
+        if (raw) {
+          dates.add(formatDateMMDDYYYY(raw));
+        }
+      });
+    }
+
+    if (typeof leave.inclusivedates === 'string' && leave.inclusivedates.trim() !== '') {
+      leave.inclusivedates.split(',').forEach((raw) => {
+        const trimmed = raw.trim();
+        if (trimmed) {
+          dates.add(formatDateMMDDYYYY(trimmed));
+        }
+      });
+    }
+
+    if (dates.size === 0) {
+      const fallback = leave.LEAVEDATE || leave.leavedate || leave.leaveDate || null;
+      if (fallback) {
+        dates.add(formatDateMMDDYYYY(fallback));
+      }
+    }
+
+    return Array.from(dates);
+  };
+
+  const leaveNo = leave.leaveno || leave.LEAVEREFNO || leave.leaverefno || 'N/A';
+  const leaveType = leave.leave_type_name || leave.LeaveName || leave.leavetype || 'N/A';
+  const leaveMode = leave.deductmode || leave.mode || 'N/A';
+  const normalizedStatus = normalizeStatusLabel(leave.leavestatus || leave.LEAVESTATUS || leave.status);
+  const leavePurpose = leave.leavepurpose || leave.LEAVEREMARKS || leave.leaveremarks || 'No purpose provided';
+  const leaveDays = leave.inclusivedates || leave.LEAVEDAYS || leave.leaveDays || leave.leavecredits || 'N/A';
+  const employeeName = getEmployeeNameForLeave(leave.USERID || leave.userid || leave.user_id, employees) || leave.NAME || 'N/A';
+  const createdBy = leave.created_by_employee_name || leave.created_by_username || leave.createdbyname || 'N/A';
+  const approvedBy = leave.approved_by_employee_name || leave.approved_by_username || leave.approvedbyname || 'N/A';
+  const createdDate = leave.createddate || leave.createdDate || leave.created_at || null;
+  const approvedDate = leave.approveddate || leave.approvedDate || null;
+  const formattedInclusiveDates = collectInclusiveDates();
+
+  const formatDateDisplay = (value) => {
+    if (!value) return 'N/A';
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return formatDateMMDDYYYY(date.toISOString().split('T')[0]);
+    }
+    return formatDateMMDDYYYY(value);
+  };
+
+  const statusBadgeClass = (() => {
+    switch (normalizedStatus) {
+      case 'For Approval':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'Approved':
+        return 'bg-green-100 text-green-800';
+      case 'Returned':
+        return 'bg-blue-100 text-blue-800';
+      case 'Cancelled':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  })();
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800">Leave Information</h2>
+            <p className="text-sm text-gray-500 mt-1">Reference Number: {leaveNo}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 text-3xl font-bold leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-6 py-6 space-y-8">
+          <section>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b border-gray-200 pb-2">
+              Summary
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <span className="block text-sm font-medium text-gray-600 mb-1">Employee</span>
+                <span className="text-base font-semibold text-gray-900">{employeeName}</span>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <span className="block text-sm font-medium text-gray-600 mb-1">Leave Type</span>
+                <span className="text-base font-semibold text-gray-900">{leaveType}</span>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <span className="block text-sm font-medium text-gray-600 mb-1">Mode</span>
+                <span className="text-base font-semibold text-gray-900">{leaveMode}</span>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <span className="block text-sm font-medium text-gray-600 mb-1">Status</span>
+                <span className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold ${statusBadgeClass}`}>
+                  {normalizedStatus || 'N/A'}
+                </span>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <span className="block text-sm font-medium text-gray-600 mb-1">Leave Days / Credits</span>
+                <span className="text-base font-semibold text-gray-900">
+                  {typeof leaveDays === 'number' ? leaveDays : String(leaveDays).trim() || 'N/A'}
+                </span>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <span className="block text-sm font-medium text-gray-600 mb-1">Created Date</span>
+                <span className="text-base font-semibold text-gray-900">
+                  {createdDate ? formatDateDisplay(createdDate) : 'N/A'}
+                </span>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <span className="block text-sm font-medium text-gray-600 mb-1">Approved Date</span>
+                <span className="text-base font-semibold text-gray-900">
+                  {approvedDate ? formatDateDisplay(approvedDate) : 'N/A'}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b border-gray-200 pb-2">
+              Inclusive Dates
+            </h3>
+            <div className="bg-gray-50 p-4 rounded-lg min-h-[80px] text-gray-900">
+              {formattedInclusiveDates.length > 0 ? formattedInclusiveDates.join(', ') : 'N/A'}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b border-gray-200 pb-2">
+              Reason / Purpose
+            </h3>
+            <div className="bg-gray-50 p-4 rounded-lg min-h-[100px] text-gray-900 whitespace-pre-wrap">
+              {leavePurpose}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b border-gray-200 pb-2">
+              Audit Trail
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <span className="block text-sm font-medium text-gray-600 mb-1">Created By</span>
+                <span className="text-base font-semibold text-gray-900">{createdBy}</span>
+              </div>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <span className="block text-sm font-medium text-gray-600 mb-1">Approved By</span>
+                <span className="text-base font-semibold text-gray-900">{approvedBy}</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const CdoDetailModal = ({ isOpen, onClose, cdo }) => {
   if (!isOpen || !cdo) return null;

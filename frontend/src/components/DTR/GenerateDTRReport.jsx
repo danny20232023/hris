@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../utils/api';
 import GenerateDTRPrint_Ind from './GenerateDTRPrint_Ind';
 import GenerateDTRPrint_Dept from './GenerateDTRPrint_Dept';
+import GenerateDTRPrintReportWithAnnotations from './print_GenerateDTRPrintReportWithAnnotations';
 import { getAppointmentOptions, getAppointmentName } from '../../utils/appointmentLookup';
 import { formatEmployeeName } from '../../utils/employeenameFormatter';
 
@@ -21,6 +22,30 @@ const GenerateDTRReport = () => {
   const [selectedAppointment, setSelectedAppointment] = useState('all'); // Added appointment filter
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showBulkPrintModal, setShowBulkPrintModal] = useState(false);
+  const [showPrintOptionsModal, setShowPrintOptionsModal] = useState(false);
+  const [showBulkPrintOptionsModal, setShowBulkPrintOptionsModal] = useState(false);
+  const [printFormat, setPrintFormat] = useState('basic');
+  const [bulkPrintFormat, setBulkPrintFormat] = useState('basic');
+  const [selectedAnnotations, setSelectedAnnotations] = useState({
+    locator: true,
+    fixlog: true,
+    leave: true,
+    travel: true,
+    cdo: true,
+    holiday: true,
+    weekend: true,
+    absent: true
+  });
+  const [bulkSelectedAnnotations, setBulkSelectedAnnotations] = useState({
+    locator: true,
+    fixlog: true,
+    leave: true,
+    travel: true,
+    cdo: true,
+    holiday: true,
+    weekend: true,
+    absent: true
+  });
 
   // New state for department employee selection
   const [departmentEmployees, setDepartmentEmployees] = useState([]);
@@ -651,7 +676,7 @@ const GenerateDTRReport = () => {
               {/* Generate Button */}
               {selectedEmployee && selectedMonth && (
                 <button
-                  onClick={() => setShowPrintModal(true)}
+                  onClick={() => setShowPrintOptionsModal(true)}
                   className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   Generate Report
@@ -888,7 +913,7 @@ const GenerateDTRReport = () => {
               {selectedDepartmentEmployees.size > 0 && selectedMonth && (
                 <div className="mt-6 flex justify-end">
                   <button
-                    onClick={() => setShowBulkPrintModal(true)}
+                    onClick={() => setShowBulkPrintOptionsModal(true)}
                     className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     Generate Report ({selectedDepartmentEmployees.size} employees)
@@ -899,17 +924,395 @@ const GenerateDTRReport = () => {
           )}
         </div>
 
+        {/* Print Options Modal - Individual */}
+        {showPrintOptionsModal && selectedEmployee && selectedMonth && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+              <h2 className="text-xl font-bold mb-4">Print Options</h2>
+              
+              {/* Print Format Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Print Format</label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="printFormat"
+                      value="basic"
+                      checked={printFormat === 'basic'}
+                      onChange={(e) => setPrintFormat(e.target.value)}
+                      className="mr-2"
+                    />
+                    <span>Basic Format</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="printFormat"
+                      value="annotations"
+                      checked={printFormat === 'annotations'}
+                      onChange={(e) => setPrintFormat(e.target.value)}
+                      className="mr-2"
+                    />
+                    <span>With Annotations</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Annotation Selection (only shown when "With Annotations" is selected) */}
+              {printFormat === 'annotations' && (
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-3">
+                    <label className="block text-sm font-medium text-gray-700">Select Annotations</label>
+                    <div className="space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedAnnotations({
+                            locator: true,
+                            fixlog: true,
+                            leave: true,
+                            travel: true,
+                            cdo: true,
+                            holiday: true,
+                            weekend: true,
+                            absent: true
+                          });
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedAnnotations({
+                            locator: false,
+                            fixlog: false,
+                            leave: false,
+                            travel: false,
+                            cdo: false,
+                            holiday: false,
+                            weekend: false,
+                            absent: false
+                          });
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        Deselect All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnotations.locator}
+                        onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, locator: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">📌 Locator Backfill</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnotations.fixlog}
+                        onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, fixlog: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">🔒 Fix Log Override</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnotations.leave}
+                        onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, leave: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Leave</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnotations.travel}
+                        onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, travel: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Travel</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnotations.cdo}
+                        onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, cdo: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">CDO</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnotations.holiday}
+                        onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, holiday: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Holiday</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnotations.weekend}
+                        onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, weekend: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Weekend</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnotations.absent}
+                        onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, absent: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Absent</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => {
+                    setShowPrintOptionsModal(false);
+                    setPrintFormat('basic');
+                  }}
+                  className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPrintOptionsModal(false);
+                    setShowPrintModal(true);
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  Print
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Print Options Modal - Department */}
+        {showBulkPrintOptionsModal && selectedDepartmentEmployees.size > 0 && selectedMonth && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+              <h2 className="text-xl font-bold mb-4">Print Options</h2>
+              
+              {/* Print Format Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Print Format</label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="bulkPrintFormat"
+                      value="basic"
+                      checked={bulkPrintFormat === 'basic'}
+                      onChange={(e) => setBulkPrintFormat(e.target.value)}
+                      className="mr-2"
+                    />
+                    <span>Basic Format</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="bulkPrintFormat"
+                      value="annotations"
+                      checked={bulkPrintFormat === 'annotations'}
+                      onChange={(e) => setBulkPrintFormat(e.target.value)}
+                      className="mr-2"
+                    />
+                    <span>With Annotations</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Annotation Selection (only shown when "With Annotations" is selected) */}
+              {bulkPrintFormat === 'annotations' && (
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-3">
+                    <label className="block text-sm font-medium text-gray-700">Select Annotations</label>
+                    <div className="space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBulkSelectedAnnotations({
+                            locator: true,
+                            fixlog: true,
+                            leave: true,
+                            travel: true,
+                            cdo: true,
+                            holiday: true,
+                            weekend: true,
+                            absent: true
+                          });
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBulkSelectedAnnotations({
+                            locator: false,
+                            fixlog: false,
+                            leave: false,
+                            travel: false,
+                            cdo: false,
+                            holiday: false,
+                            weekend: false,
+                            absent: false
+                          });
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-800"
+                      >
+                        Deselect All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedAnnotations.locator}
+                        onChange={(e) => setBulkSelectedAnnotations({ ...bulkSelectedAnnotations, locator: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">📌 Locator Backfill</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedAnnotations.fixlog}
+                        onChange={(e) => setBulkSelectedAnnotations({ ...bulkSelectedAnnotations, fixlog: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">🔒 Fix Log Override</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedAnnotations.leave}
+                        onChange={(e) => setBulkSelectedAnnotations({ ...bulkSelectedAnnotations, leave: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Leave</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedAnnotations.travel}
+                        onChange={(e) => setBulkSelectedAnnotations({ ...bulkSelectedAnnotations, travel: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Travel</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedAnnotations.cdo}
+                        onChange={(e) => setBulkSelectedAnnotations({ ...bulkSelectedAnnotations, cdo: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">CDO</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedAnnotations.holiday}
+                        onChange={(e) => setBulkSelectedAnnotations({ ...bulkSelectedAnnotations, holiday: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Holiday</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedAnnotations.weekend}
+                        onChange={(e) => setBulkSelectedAnnotations({ ...bulkSelectedAnnotations, weekend: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Weekend</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={bulkSelectedAnnotations.absent}
+                        onChange={(e) => setBulkSelectedAnnotations({ ...bulkSelectedAnnotations, absent: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">Absent</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => {
+                    setShowBulkPrintOptionsModal(false);
+                    setBulkPrintFormat('basic');
+                  }}
+                  className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBulkPrintOptionsModal(false);
+                    setShowBulkPrintModal(true);
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                >
+                  Print
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Print Modals */}
-        {showPrintModal && selectedEmployee && selectedMonth && (
+        {showPrintModal && selectedEmployee && selectedMonth && printFormat === 'basic' && (
           <GenerateDTRPrint_Ind
             employee={selectedEmployee}
             selectedMonth={selectedMonth}
             selectedPeriod={selectedPeriod}
-            onClose={() => setShowPrintModal(false)}
+            onClose={() => {
+              setShowPrintModal(false);
+              setPrintFormat('basic');
+            }}
           />
         )}
 
-        {showBulkPrintModal && selectedDepartmentEmployees.size > 0 && selectedMonth && (
+        {showPrintModal && selectedEmployee && selectedMonth && printFormat === 'annotations' && (
+          <GenerateDTRPrintReportWithAnnotations
+            employee={selectedEmployee}
+            selectedMonth={selectedMonth}
+            selectedPeriod={selectedPeriod}
+            selectedAnnotations={selectedAnnotations}
+            onClose={() => {
+              setShowPrintModal(false);
+              setPrintFormat('basic');
+            }}
+          />
+        )}
+
+        {showBulkPrintModal && selectedDepartmentEmployees.size > 0 && selectedMonth && bulkPrintFormat === 'basic' && (
           <GenerateDTRPrint_Dept
             department={selectedDepartment}
             selectedEmployees={selectedDepartmentEmployees}
@@ -918,7 +1321,27 @@ const GenerateDTRReport = () => {
             selectedStatus={selectedStatus}
             selectedAppointment={selectedAppointment}
             departmentEmployees={departmentEmployees}
-            onClose={() => setShowBulkPrintModal(false)}
+            onClose={() => {
+              setShowBulkPrintModal(false);
+              setBulkPrintFormat('basic');
+            }}
+          />
+        )}
+
+        {showBulkPrintModal && selectedDepartmentEmployees.size > 0 && selectedMonth && bulkPrintFormat === 'annotations' && (
+          <GenerateDTRPrintReportWithAnnotations
+            department={selectedDepartment}
+            selectedEmployees={selectedDepartmentEmployees}
+            selectedMonth={selectedMonth}
+            selectedPeriod={selectedPeriod}
+            selectedStatus={selectedStatus}
+            selectedAppointment={selectedAppointment}
+            departmentEmployees={departmentEmployees}
+            selectedAnnotations={bulkSelectedAnnotations}
+            onClose={() => {
+              setShowBulkPrintModal(false);
+              setBulkPrintFormat('basic');
+            }}
           />
         )}
       </div>

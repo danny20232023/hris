@@ -1147,7 +1147,53 @@ export const approveTransaction = async (req, res) => {
         await updateLocator(updateReq, res);
         break;
       case 'leave':
-        updateReq.body.status = 'Approved';
+        // Fetch current leave transaction to get all required fields
+        const pool = getHR201Pool();
+        let connection;
+        try {
+          connection = await pool.getConnection();
+          
+          // Fetch current leave transaction
+          const [currentLeave] = await connection.execute(
+            'SELECT * FROM employee_leave_trans WHERE objid = ?',
+            [id]
+          );
+          
+          if (currentLeave.length === 0) {
+            if (connection) connection.release();
+            return res.status(404).json({ success: false, message: 'Leave transaction not found' });
+          }
+          
+          const leave = currentLeave[0];
+          
+          // Get leave dates from details table
+          const [leaveDates] = await connection.execute(
+            'SELECT leavedate FROM employee_leave_trans_details WHERE leave_objid = ? ORDER BY leavedate',
+            [id]
+          );
+          const selectedDates = leaveDates.map(row => row.leavedate);
+          
+          // Prepare update request with all required fields
+          updateReq.body = {
+            ...updateReq.body,
+            status: 'Approved',
+            leavetypeid: leave.leavetypeid,
+            deductmode: leave.deductmode || 'Leave',
+            leavepurpose: leave.leavepurpose,
+            selectedDates: selectedDates,
+            deductedcredit: leave.deductedcredit,
+            inclusivedates: leave.inclusivedates,
+            leavecharging: leave.leavecharging || 'VL', // Default to 'VL' if not set
+            leaveremarks: req.body.remarks || leave.leaveremarks || null // Use remarks from request or existing
+          };
+          
+          if (connection) connection.release();
+        } catch (dbError) {
+          if (connection) connection.release();
+          console.error('Error fetching leave transaction data:', dbError);
+          return res.status(500).json({ success: false, message: 'Failed to fetch leave transaction data', error: dbError.message });
+        }
+        
         await updateLeaveTransaction(updateReq, res);
         break;
       case 'fixlog':
@@ -1205,7 +1251,53 @@ export const returnTransaction = async (req, res) => {
         await updateLocator(updateReq, res);
         break;
       case 'leave':
-        updateReq.body.status = 'Returned';
+        // Fetch current leave transaction to get all required fields
+        const poolLeaveReturn = getHR201Pool();
+        let connectionLeaveReturn;
+        try {
+          connectionLeaveReturn = await poolLeaveReturn.getConnection();
+          
+          // Fetch current leave transaction
+          const [currentLeave] = await connectionLeaveReturn.execute(
+            'SELECT * FROM employee_leave_trans WHERE objid = ?',
+            [id]
+          );
+          
+          if (currentLeave.length === 0) {
+            if (connectionLeaveReturn) connectionLeaveReturn.release();
+            return res.status(404).json({ success: false, message: 'Leave transaction not found' });
+          }
+          
+          const leave = currentLeave[0];
+          
+          // Get leave dates from details table
+          const [leaveDates] = await connectionLeaveReturn.execute(
+            'SELECT leavedate FROM employee_leave_trans_details WHERE leave_objid = ? ORDER BY leavedate',
+            [id]
+          );
+          const selectedDates = leaveDates.map(row => row.leavedate);
+          
+          // Prepare update request with all required fields
+          updateReq.body = {
+            ...updateReq.body,
+            status: 'Returned',
+            leavetypeid: leave.leavetypeid,
+            deductmode: leave.deductmode || 'Leave',
+            leavepurpose: leave.leavepurpose,
+            selectedDates: selectedDates,
+            deductedcredit: leave.deductedcredit,
+            inclusivedates: leave.inclusivedates,
+            leavecharging: leave.leavecharging || 'VL',
+            leaveremarks: req.body.remarks || leave.leaveremarks || null
+          };
+          
+          if (connectionLeaveReturn) connectionLeaveReturn.release();
+        } catch (dbError) {
+          if (connectionLeaveReturn) connectionLeaveReturn.release();
+          console.error('Error fetching leave transaction data:', dbError);
+          return res.status(500).json({ success: false, message: 'Failed to fetch leave transaction data', error: dbError.message });
+        }
+        
         await updateLeaveTransaction(updateReq, res);
         break;
       case 'fixlog':
@@ -1274,7 +1366,53 @@ export const cancelTransaction = async (req, res) => {
         await updateLocator(updateReq, res);
         break;
       case 'leave':
-        updateReq.body.status = 'Cancelled';
+        // Fetch current leave transaction to get all required fields
+        const poolLeaveCancel = getHR201Pool();
+        let connectionLeaveCancel;
+        try {
+          connectionLeaveCancel = await poolLeaveCancel.getConnection();
+          
+          // Fetch current leave transaction
+          const [currentLeave] = await connectionLeaveCancel.execute(
+            'SELECT * FROM employee_leave_trans WHERE objid = ?',
+            [id]
+          );
+          
+          if (currentLeave.length === 0) {
+            if (connectionLeaveCancel) connectionLeaveCancel.release();
+            return res.status(404).json({ success: false, message: 'Leave transaction not found' });
+          }
+          
+          const leave = currentLeave[0];
+          
+          // Get leave dates from details table
+          const [leaveDates] = await connectionLeaveCancel.execute(
+            'SELECT leavedate FROM employee_leave_trans_details WHERE leave_objid = ? ORDER BY leavedate',
+            [id]
+          );
+          const selectedDates = leaveDates.map(row => row.leavedate);
+          
+          // Prepare update request with all required fields
+          updateReq.body = {
+            ...updateReq.body,
+            status: 'Cancelled',
+            leavetypeid: leave.leavetypeid,
+            deductmode: leave.deductmode || 'Leave',
+            leavepurpose: leave.leavepurpose,
+            selectedDates: selectedDates,
+            deductedcredit: leave.deductedcredit,
+            inclusivedates: leave.inclusivedates,
+            leavecharging: leave.leavecharging || 'VL',
+            leaveremarks: req.body.remarks || leave.leaveremarks || null
+          };
+          
+          if (connectionLeaveCancel) connectionLeaveCancel.release();
+        } catch (dbError) {
+          if (connectionLeaveCancel) connectionLeaveCancel.release();
+          console.error('Error fetching leave transaction data:', dbError);
+          return res.status(500).json({ success: false, message: 'Failed to fetch leave transaction data', error: dbError.message });
+        }
+        
         await updateLeaveTransaction(updateReq, res);
         break;
       case 'fixlog':

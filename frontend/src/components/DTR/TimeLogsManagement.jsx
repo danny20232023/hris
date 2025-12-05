@@ -9,6 +9,8 @@ import { TravelDetailModal } from './MyShiftView';
 import { usePermissions } from '../../hooks/usePermissions';
 import { formatEmployeeName, formatEmployeeNameFromObject } from '../../utils/employeenameFormatter';
 import FixTimeModal from './FixTimeModal.jsx';
+import GenerateDTRPrint_Ind from './GenerateDTRPrint_Ind';
+import GenerateDTRPrintReportWithAnnotations from './print_GenerateDTRPrintReportWithAnnotations';
 
 // --- Utility Functions ---
 
@@ -95,6 +97,14 @@ const getInitials = (value = '') => {
   const first = parts[0][0] || '';
   const last = parts[parts.length - 1][0] || '';
   return (first + last).toUpperCase();
+};
+
+// Helper function to get employee name from userId
+const getEmployeeNameForLocator = (userId, employees = []) => {
+  if (!userId) return 'N/A';
+  if (!Array.isArray(employees) || employees.length === 0) return `User ID: ${userId}`;
+  const employee = employees.find(emp => String(emp.USERID) === String(userId));
+  return employee?.NAME || `User ID: ${userId}`;
 };
 
 // Normalize time value from "HH:mm:ss" or "HH:mm" to "HH:mm" format
@@ -784,32 +794,43 @@ const extractParticipantEmpObjIdsFromEmployeesData = (employeesData) => {
 };
 
 const travelRecordIncludesEmployee = (travel, employeeObjId, userId) => {
+  // Only check if employee has records in employee_travels_dates (is a participant)
+  // Do NOT check createdby - employees who created/updated/approved but are not participants should be excluded
   const objIdStr = employeeObjId ? String(employeeObjId) : null;
   const userIdStr = userId ? String(userId) : null;
 
   if (objIdStr) {
-    if (travel.emp_objid && String(travel.emp_objid) === objIdStr) return true;
-    if (travel.employee_objid && String(travel.employee_objid) === objIdStr) return true;
-    if (travel.EMP_OBJID && String(travel.EMP_OBJID) === objIdStr) return true;
+    // Check employees_data which comes from employee_travels_dates table
+    const parsed = extractParticipantEmpObjIdsFromEmployeesData(travel.employees_data);
+    if (parsed.some((id) => String(id) === objIdStr)) return true;
 
-    if (Array.isArray(travel.employees)) {
-      if (travel.employees.some((emp) => String(emp?.objid) === objIdStr)) return true;
-    }
-
+    // Check participantEmpObjIds array (also from employee_travels_dates)
     if (Array.isArray(travel.participantEmpObjIds)) {
       if (travel.participantEmpObjIds.some((id) => String(id) === objIdStr)) return true;
     }
 
-    const parsed = extractParticipantEmpObjIdsFromEmployeesData(travel.employees_data);
-    if (parsed.some((id) => String(id) === objIdStr)) return true;
+    // Check employees array (if it contains participant data)
+    if (Array.isArray(travel.employees)) {
+      if (travel.employees.some((emp) => String(emp?.objid) === objIdStr)) return true;
+    }
+
+    // Legacy fields - only if they represent actual participation, not creation
+    // These are kept for backward compatibility but should come from employee_travels_dates
+    if (travel.emp_objid && String(travel.emp_objid) === objIdStr) return true;
+    if (travel.employee_objid && String(travel.employee_objid) === objIdStr) return true;
+    if (travel.EMP_OBJID && String(travel.EMP_OBJID) === objIdStr) return true;
   }
 
   if (userIdStr) {
-    if (travel.USERID && String(travel.USERID) === userIdStr) return true;
-    if (travel.createdby && String(travel.createdby) === userIdStr) return true;
+    // Check participantUserIds array (from employee_travels_dates)
     if (Array.isArray(travel.participantUserIds)) {
       if (travel.participantUserIds.some((id) => String(id) === userIdStr)) return true;
     }
+
+    // Legacy USERID field - only if it represents actual participation
+    if (travel.USERID && String(travel.USERID) === userIdStr) return true;
+    
+    // DO NOT check travel.createdby - this would include employees who created but are not participants
   }
 
   return false;
@@ -822,12 +843,29 @@ const getTravelRemarksForDate = (travelData, dateStr, userId, employeeObjId) => 
   }
 
   const matches = travelData.filter((travel) => {
+    // Exclude travel records created by sysusers (where created_by_username exists but created_by_employee_name is null/empty)
+    // This indicates the record was created by a sysuser without an associated employee record
+    // BUT only exclude if the employee is NOT a participant in the travel (not in employee_travels_dates)
+    const createdByUsername = travel.created_by_username || travel.createdByUsername;
+    const createdByEmployeeName = travel.created_by_employee_name || travel.createdByEmployeeName;
+    
+    // First check if employee is a participant in the travel (has records in employee_travels_dates)
+    // This is checked by travelRecordIncludesEmployee which looks at employees_data, participantEmpObjIds, etc.
+    const isParticipant = travelRecordIncludesEmployee(travel, employeeObjId, userId);
+    
+    // If created_by_username exists but created_by_employee_name is missing, it's a sysuser-created record
+    // Only exclude it if the employee is NOT a participant
+    if (createdByUsername && !createdByEmployeeName && !isParticipant) {
+      return false;
+    }
+
     const status = normalizeStatusLabel(travel.travelstatus || travel.status || travel.TRAVELSTATUS);
     if (status !== 'Approved') {
       return false;
     }
 
-    if (!travelRecordIncludesEmployee(travel, employeeObjId, userId)) {
+    // Travel remarks should appear if employee has records in employee_travels_dates (is a participant)
+    if (!isParticipant) {
       return false;
     }
 
@@ -1181,7 +1219,7 @@ const getFixLogsForDate = (fixLogsData, dateStr, employeeObjId) => {
     if (fixDate !== dateStr) return false;
 
     const status = normalizeStatusLabel(fixLog.fixstatus || fixLog.FIXSTATUS);
-    if (status !== 'Approved' && status !== 'For Approval') return false;
+    if (status !== 'Approved') return false; // Only process approved fix logs (exclude "For Approval")
 
     const matchesObjId =
       empObjIdStr &&
@@ -1226,20 +1264,20 @@ const hasExistingRemarksForDate = (dateStr, userId, employeeObjId, locatorData, 
   const travelRemarksData = getTravelRemarksForDate(travelData, dateStr, userId, employeeObjId);
   const cdoRemarksData = getCdoRemarksForDate(cdoUsageMap, dateStr);
   
-  // Check if any of these have Approved or For Approval status
+  // Check if any of these have Approved status (exclude "For Approval")
   const hasLocator = locatorRemarks.locators && locatorRemarks.locators.some(loc => {
     const status = normalizeStatusLabel(loc.locstatus || loc.LOCSTATUS);
-    return status === 'Approved' || status === 'For Approval';
+    return status === 'Approved';
   });
   
   const hasLeave = leaveRemarksData.leaveRecords && leaveRemarksData.leaveRecords.some(leave => {
     const status = normalizeStatusLabel(leave.leavestatus || leave.LEAVESTATUS || leave.status);
-    return status === 'Approved' || status === 'For Approval';
+    return status === 'Approved';
   });
   
   const hasTravel = travelRemarksData.travelRecords && travelRemarksData.travelRecords.some(travel => {
     const status = normalizeStatusLabel(travel.travelstatus || travel.TRAVELSTATUS || travel.status);
-    return status === 'Approved' || status === 'For Approval';
+    return status === 'Approved';
   });
   
   const hasCdo = cdoRemarksData.records && cdoRemarksData.records.length > 0;
@@ -1926,6 +1964,30 @@ const calculateDaysWithLeaveTravel = (amCheckIn, amCheckOut, pmCheckIn, pmCheckO
   return Number(timeBasedDays) || 0;
 };
 
+// Helper to get selected month from startDate (first day of month format)
+const getSelectedMonth = (startDate) => {
+  if (!startDate) return '';
+  const date = new Date(startDate);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}-01`;
+};
+
+// Helper to determine period based on date range
+const getSelectedPeriod = (startDate, endDate) => {
+  if (!startDate || !endDate) return 'full';
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const startDay = start.getDate();
+  const endDay = end.getDate();
+  const lastDayOfMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+  
+  if (startDay === 1 && endDay === lastDayOfMonth) return 'full';
+  if (startDay === 1 && endDay === 15) return 'first_half';
+  if (startDay === 16 && endDay === lastDayOfMonth) return 'second_half';
+  return 'full'; // Default fallback
+};
+
 // Generate date range array (simple implementation)
 const generateDateRange = (startDate, endDate) => {
   if (!startDate || !endDate) return [];
@@ -2148,9 +2210,26 @@ function groupLogsByDateWithTimeWindows(
       }
     }
 
+    // REMARKS: from locator2, leave2, travel2, holiday2, plus static "Weekend", "Leave", and "Travel" indicators
+    // Check for Travel, Leave, CDO BEFORE calculating LATE - do not compute LATE if date has these remarks
+    const dateObj = new Date(date);
+    const isWeekendDay = isWeekend(date);
+    const hasLeave = hasLeaveForDate(leaveData, date, userId, employeeObjId);
+    const hasTravel = hasTravelRecordForDate(travelData, date, userId, employeeObjId);
+    
+    const locatorRemarks = getLocatorRemarksForDate(locatorData, date, userId, employeeObjId);
+    const leaveRemarksData = getLeaveRemarksForDate(leaveData, date, userId, employeeObjId);
+    const travelRemarksData = getTravelRemarksForDate(travelData, date, userId, employeeObjId);
+    const cdoRemarksData = getCdoRemarksForDate(cdoMap, date);
+    const cdoRecords = cdoRemarksData.records || [];
+    const cdoRemarksStr = cdoRemarksData.remarks || '';
+    const hasCdo = cdoRecords.length > 0;
+
     // Calculate late minutes - only for active check-in columns
+    // DO NOT compute LATE if the date has Travel, Leave, or CDO remarks
     let LATE = 0;
     
+    if (!hasTravel && !hasLeave && !hasCdo) {
     // AM_CHECKIN late calculation - only if AM check-in is active
     if (activeColumns.hasAMCheckIn && AM_CHECKIN && shiftSchedule.SHIFT_AMCHECKIN) {
       const expectedAMTime = timeToMinutes(extractTimeFromString(shiftSchedule.SHIFT_AMCHECKIN));
@@ -2186,25 +2265,12 @@ function groupLogsByDateWithTimeWindows(
       if (actualPMCheckOutTime < expectedPMCheckOutTime) {
         const earlyMins = expectedPMCheckOutTime - actualPMCheckOutTime;
         LATE += earlyMins;
+        }
       }
     }
 
     // Calculate days using the proper function with actual time logs
     const DAYS = Number(calculateDaysWithLeaveTravel(AM_CHECKIN, AM_CHECKOUT, PM_CHECKIN, PM_CHECKOUT, date, userId, employeeObjId, leaveData, travelData, holidayData, shiftSchedule, cdoMap, fixLogsData, locatorData)) || 0;
-
-    // REMARKS: from locator2, leave2, travel2, holiday2, plus static "Weekend", "Leave", and "Travel" indicators
-    const dateObj = new Date(date);
-    const isWeekendDay = isWeekend(date);
-    const hasLeave = hasLeaveForDate(leaveData, date, userId, employeeObjId);
-    const hasTravel = hasTravelRecordForDate(travelData, date, userId, employeeObjId);
-    
-    const locatorRemarks = getLocatorRemarksForDate(locatorData, date, userId, employeeObjId);
-    const leaveRemarksData = getLeaveRemarksForDate(leaveData, date, userId, employeeObjId);
-    const travelRemarksData = getTravelRemarksForDate(travelData, date, userId, employeeObjId);
-    const cdoRemarksData = getCdoRemarksForDate(cdoMap, date);
-    const cdoRecords = cdoRemarksData.records || [];
-    const cdoRemarksStr = cdoRemarksData.remarks || '';
-    const hasCdo = cdoRecords.length > 0;
     const holidayInfo = getHolidayDisplayForDate(holidayData, date);
     const holidaysForDate = holidayInfo?.records || [];
     const holidayNameList = holidayInfo?.names || [];
@@ -3665,6 +3731,21 @@ function TimeLogsManagement() {
   // For printing
   const printRef = useRef();
   
+  // Print options state
+  const [showPrintOptionsModal, setShowPrintOptionsModal] = useState(false);
+  const [printFormat, setPrintFormat] = useState('basic'); // 'basic' or 'annotations'
+  const [selectedAnnotations, setSelectedAnnotations] = useState({
+    locator: true,
+    fixlog: true,
+    leave: true,
+    travel: true,
+    cdo: true,
+    holiday: true,
+    weekend: true,
+    absent: true
+  });
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  
   // Fetch employees (MySQL HR201 employees table)
   useEffect(() => {
     if (!canReadTimeLogs) return;
@@ -5029,7 +5110,11 @@ const hasMissingTimeLogs = (row, shiftSchedule) => {
           {/* Print and Export Buttons */}
           <div className="flex space-x-2">
             <button
-              onClick={handlePrint}
+              onClick={() => {
+                if (selectedEmployee && startDate && endDate) {
+                  setShowPrintOptionsModal(true);
+                }
+              }}
               className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 shadow"
               disabled={!selectedEmployee || processedLogs.length === 0}
             >
@@ -5490,6 +5575,7 @@ const hasMissingTimeLogs = (row, shiftSchedule) => {
                                   
                                   // Add indicator badges (lower priority than time display)
                                   // Note: Holiday badge is hidden when time logs are present
+                                  // Note: Travel annotation is NOT shown when there are existing logs
                                   if (hasLeave) {
                                     badges.push(
                                       <span key="leave" className="inline-block ml-1 px-1 py-0.5 text-xs bg-purple-100 text-purple-700 rounded font-semibold" title="Leave">
@@ -5498,13 +5584,7 @@ const hasMissingTimeLogs = (row, shiftSchedule) => {
                                     );
                                   }
                                   
-                                  if (hasTravel) {
-                                    badges.push(
-                                      <span key="travel" className="inline-block ml-1 px-1 py-0.5 text-xs bg-green-100 text-green-700 rounded font-semibold" title="Travel">
-                                        Travel
-                                      </span>
-                                    );
-                                  }
+                                  // Travel annotation removed - only show when no time logs exist
                                   
                                   if (hasCdo) {
                                     badges.push(
@@ -5842,6 +5922,218 @@ const hasMissingTimeLogs = (row, shiftSchedule) => {
           leave={selectedLeave}
           employees={employees}
         />
+
+      {/* Print Options Modal */}
+      {showPrintOptionsModal && selectedEmployee && startDate && endDate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold mb-4">Print Options</h2>
+            
+            {/* Print Format Selection */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Print Format</label>
+              <div className="space-y-2">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="printFormat"
+                    value="basic"
+                    checked={printFormat === 'basic'}
+                    onChange={(e) => setPrintFormat(e.target.value)}
+                    className="mr-2"
+                  />
+                  <span>Basic Format</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="printFormat"
+                    value="annotations"
+                    checked={printFormat === 'annotations'}
+                    onChange={(e) => setPrintFormat(e.target.value)}
+                    className="mr-2"
+                  />
+                  <span>With Annotations</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Annotation Selection (only shown when "With Annotations" is selected) */}
+            {printFormat === 'annotations' && (
+              <div className="mb-6">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-sm font-medium text-gray-700">Select Annotations</label>
+                  <div className="space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAnnotations({
+                          locator: true,
+                          fixlog: true,
+                          leave: true,
+                          travel: true,
+                          cdo: true,
+                          holiday: true,
+                          weekend: true,
+                          absent: true
+                        });
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedAnnotations({
+                          locator: false,
+                          fixlog: false,
+                          leave: false,
+                          travel: false,
+                          cdo: false,
+                          holiday: false,
+                          weekend: false,
+                          absent: false
+                        });
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-800"
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedAnnotations.locator} 
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, locator: e.target.checked })} 
+                      className="mr-2" 
+                    />
+                    <span className="text-sm">📌 Locator Backfill</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedAnnotations.fixlog} 
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, fixlog: e.target.checked })} 
+                      className="mr-2" 
+                    />
+                    <span className="text-sm">🔒 Fix Log Override</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedAnnotations.leave} 
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, leave: e.target.checked })} 
+                      className="mr-2" 
+                    />
+                    <span className="text-sm">Leave</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedAnnotations.travel} 
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, travel: e.target.checked })} 
+                      className="mr-2" 
+                    />
+                    <span className="text-sm">Travel</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedAnnotations.cdo} 
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, cdo: e.target.checked })} 
+                      className="mr-2" 
+                    />
+                    <span className="text-sm">CDO</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedAnnotations.holiday} 
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, holiday: e.target.checked })} 
+                      className="mr-2" 
+                    />
+                    <span className="text-sm">Holiday</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedAnnotations.weekend} 
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, weekend: e.target.checked })} 
+                      className="mr-2" 
+                    />
+                    <span className="text-sm">Weekend</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedAnnotations.absent} 
+                      onChange={(e) => setSelectedAnnotations({ ...selectedAnnotations, absent: e.target.checked })} 
+                      className="mr-2" 
+                    />
+                    <span className="text-sm">Absent</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setShowPrintOptionsModal(false);
+                  setPrintFormat('basic');
+                }}
+                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowPrintOptionsModal(false);
+                  setShowPrintModal(true);
+                }}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                Print
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Modals */}
+      {showPrintModal && selectedEmployee && startDate && endDate && printFormat === 'basic' && (
+        <GenerateDTRPrint_Ind
+          employee={{
+            ...selectedEmployee,
+            objid: selectedEmployee.EMP_OBJID || selectedEmployee.RAW?.objid || selectedEmployee.objid
+          }}
+          selectedMonth={getSelectedMonth(startDate)}
+          selectedPeriod={getSelectedPeriod(startDate, endDate)}
+          onClose={() => {
+            setShowPrintModal(false);
+            setShowPrintOptionsModal(false);
+          }}
+        />
+      )}
+
+      {showPrintModal && selectedEmployee && startDate && endDate && printFormat === 'annotations' && (
+        <GenerateDTRPrintReportWithAnnotations
+          employee={{
+            ...selectedEmployee,
+            objid: selectedEmployee.EMP_OBJID || selectedEmployee.RAW?.objid || selectedEmployee.objid
+          }}
+          selectedMonth={getSelectedMonth(startDate)}
+          selectedPeriod={getSelectedPeriod(startDate, endDate)}
+          selectedAnnotations={selectedAnnotations}
+          onClose={() => {
+            setShowPrintModal(false);
+            setShowPrintOptionsModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }
