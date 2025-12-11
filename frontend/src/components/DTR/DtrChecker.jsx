@@ -492,26 +492,53 @@ const DtrChecker = () => {
   // Fetch current designation (ispresent = 1) for logged-in user when 201 Files > My Leave Credits is active
   useEffect(() => {
     const fetchCurrentDesignation = async () => {
-      if (activeTab !== '201-files' || filesSubTab !== 'leave-credits') return;
-      if (!user || !(user.USERID || user.id)) return;
+      console.log('🔍 [DtrChecker] fetchCurrentDesignation - activeTab:', activeTab, 'filesSubTab:', filesSubTab);
+      if (activeTab !== '201-files' || filesSubTab !== 'leave-credits') {
+        console.log('⏭️ [DtrChecker] Skipping designation fetch - wrong tab');
+        return;
+      }
+      if (!user || !(user.USERID || user.id)) {
+        console.log('⏭️ [DtrChecker] Skipping designation fetch - no user');
+        return;
+      }
       try {
         setDesignationLoading(true);
+        console.log('🔍 [DtrChecker] Fetching designation for USERID:', user.USERID || user.id);
         // Find employee objid by USERID
         const empResp = await api.get('/201-employees');
         const employees = Array.isArray(empResp.data?.data) ? empResp.data.data : (Array.isArray(empResp.data) ? empResp.data : []);
         const dtrUserId = String(user.USERID || user.id);
         const me = employees.find(e => String(e.dtruserid) === dtrUserId);
+        console.log('🔍 [DtrChecker] Found employee:', me ? { objid: me.objid, name: `${me.surname}, ${me.firstname}` } : 'NOT FOUND');
         if (!me) {
+          console.log('❌ [DtrChecker] Employee not found for USERID:', dtrUserId);
           setCurrentDesignation(null);
           setDesignationLoading(false);
           return;
         }
         // Get designations and pick the one with ispresent = 1 for this emp
-        const desResp = await api.get('/employee-designations', { params: { status: 'all' } });
+        console.log('🔍 [DtrChecker] Fetching designations for emp_objid:', me.objid);
+        // Fetch with emp_objid filter and higher limit to ensure we get all designations for this employee
+        const desResp = await api.get('/employee-designations', { 
+          params: { 
+            status: 'all',
+            emp_objid: me.objid,
+            limit: 100  // Increase limit to ensure we get all designations
+          } 
+        });
         const list = Array.isArray(desResp.data?.data) ? desResp.data.data : [];
+        console.log('🔍 [DtrChecker] Total designations fetched:', list.length);
         const current = list.find(r => String(r.emp_objid) === String(me.objid) && String(r.ispresent) === '1');
+        console.log('🔍 [DtrChecker] Current designation found:', current ? {
+          position: current.position,
+          rankname: current.rankname,
+          departmentname: current.departmentname,
+          appointmentname: current.appointmentname,
+          plantilla_position_title: current.plantilla_position_title
+        } : 'NOT FOUND');
         setCurrentDesignation(current || null);
       } catch (e) {
+        console.error('❌ [DtrChecker] Error fetching designation:', e);
         setCurrentDesignation(null);
       } finally {
         setDesignationLoading(false);
@@ -621,12 +648,13 @@ const DtrChecker = () => {
     const fetchLocatorData = async () => {
       if (user && (user.id || user.USERID)) {
         const userId = user.id || user.USERID;
-        console.log(`�� [DtrChecker] Fetching locator data for USERID: ${userId}`);
+        console.log(`🔍 [DtrChecker] Fetching locator data for USERID: ${userId}`);
         
         try {
-          const response = await api.get(`/locator/entries/${userId}`);
-          setLocatorData(response.data || []);
-          console.log(`✅ [DtrChecker] Loaded ${response.data?.length || 0} locator entries`);
+          // Use the correct endpoint - fetch all locators, filter client-side
+          const response = await api.get('/locator');
+          setLocatorData(response.data?.data || response.data || []);
+          console.log(`✅ [DtrChecker] Loaded ${(response.data?.data || response.data || []).length} locator entries`);
         } catch (err) {
           console.error('❌ [DtrChecker] Error fetching locator data:', err);
           setLocatorData([]);

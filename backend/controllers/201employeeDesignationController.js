@@ -118,7 +118,8 @@ export const listDesignations = async (req, res) => {
         ed.emp_objid,
         ed.designationid as rankid,  -- Lookup to designationtypes.id
         r.designationname as rankname,  -- From designationtypes table
-        ed.position,
+        COALESCE(ed.position, p.position_title) as position,  -- Use plantilla position_title as fallback
+        p.position_title as plantilla_position_title,  -- Include plantilla position for reference
         ed.appointmentstatus as appointmentid,  -- Lookup to appointmenttypes.id
         ed.appointmentdate,
         ed.appointmentdate_end,
@@ -189,7 +190,9 @@ export const getDesignation = async (req, res) => {
     const pool = getHR201Pool();
     const { objid } = req.params;
     const [rows] = await pool.execute(
-      `SELECT ed.*, r.designationname as rankname, atp.appointmentname, p.salarygrade 
+      `SELECT ed.*, r.designationname as rankname, atp.appointmentname, p.salarygrade, 
+              COALESCE(ed.position, p.position_title) as position,
+              p.position_title as plantilla_position_title
        FROM employee_designation ed 
        LEFT JOIN designationtypes r ON ed.designationid = r.id
        LEFT JOIN appointmenttypes atp ON ed.appointmentstatus = atp.id
