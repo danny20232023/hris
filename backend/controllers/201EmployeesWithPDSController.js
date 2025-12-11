@@ -48,6 +48,9 @@ export const list = async (req, res) => {
         ed.designationid,
         ed.objid AS currentDesignationObjId,
         ed.appointmentstatus,
+        ed.plantilla_id,
+        ed.stepincrement,
+        p.salarygrade,
         atp.appointmentname AS appointmentName,
         shiftAgg.shiftNames,
         shiftAgg.firstShiftId
@@ -63,6 +66,7 @@ export const list = async (req, res) => {
       LEFT JOIN designationtypes dt ON dt.id = ed.designationid
       LEFT JOIN department dept ON dept.deptid = ed.assigneddept
       LEFT JOIN appointmenttypes atp ON atp.id = ed.appointmentstatus
+      LEFT JOIN plantilla p ON ed.plantilla_id = p.id
       LEFT JOIN (
         SELECT 
           a.emp_objid,
@@ -99,6 +103,8 @@ export const list = async (req, res) => {
         departmentId: r.assigneddept || null,
         appointment: r.appointmentName || '',
         appointmentId: r.appointmentstatus || null,
+        salarygrade: r.salarygrade || null,
+        stepincrement: r.stepincrement || null,
         shiftSchedule: r.shiftNames || '',
         shiftId: r.firstShiftId || null,
         designationRecordId: r.currentDesignationObjId || null,

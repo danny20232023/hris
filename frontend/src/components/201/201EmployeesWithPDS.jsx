@@ -99,6 +99,8 @@ const EmployeesWithPDS = () => {
   const [saving, setSaving] = useState(false);
   const [civilStatusOptions, setCivilStatusOptions] = useState([]);
   const [togglingLockId, setTogglingLockId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [recordsPerPage, setRecordsPerPage] = useState(10);
 
   const fetchList = useCallback(async () => {
     if (!canReadEmployeesWithPds) {
@@ -320,6 +322,37 @@ const EmployeesWithPDS = () => {
       return matchesSearch && matchesTitle && matchesDepartment && matchesAppointment && matchesLockStatus;
     });
   }, [normalizedRows, search, filterTitle, filterDepartment, filterAppointment, filterLockStatus]);
+
+  // Pagination calculations
+  const totalRecords = filtered.length;
+  const totalPages = Math.ceil(totalRecords / recordsPerPage);
+  const startIndex = (currentPage - 1) * recordsPerPage;
+  const endIndex = startIndex + recordsPerPage;
+  const paginatedData = filtered.slice(startIndex, endIndex);
+
+  // Pagination functions
+  const goToPage = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterTitle, filterDepartment, filterAppointment, filterLockStatus, recordsPerPage]);
 
   const initialFormState = {
     surname: '',
@@ -586,7 +619,7 @@ const EmployeesWithPDS = () => {
             ) : filtered.length === 0 ? (
               <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No records</td></tr>
             ) : (
-              filtered.map(r => (
+              paginatedData.map(r => (
                 <tr key={r.objid}>
                   <td className="px-4 py-2">
                     {(() => {
@@ -618,7 +651,25 @@ const EmployeesWithPDS = () => {
                     })()}
                   </td>
                   <td className="px-4 py-2">{r.presentDesignationName || '—'}</td>
-                  <td className="px-4 py-2">{r.positionName || '—'}</td>
+                  <td className="px-4 py-2">
+                    <div>
+                      <div>{r.positionName || '—'}</div>
+                      {(() => {
+                        const salaryGrade = r.salarygrade;
+                        const stepIncrement = r.stepincrement;
+                        
+                        if (salaryGrade !== null && salaryGrade !== undefined && String(salaryGrade).trim() !== '') {
+                          const formattedSG = String(salaryGrade).padStart(2, '0');
+                          if (stepIncrement !== null && stepIncrement !== undefined && String(stepIncrement).trim() !== '') {
+                            const formattedStep = String(stepIncrement).padStart(2, '0');
+                            return <div className="text-xs text-gray-500">SG {formattedSG}-{formattedStep}</div>;
+                          }
+                          return <div className="text-xs text-gray-500">SG {formattedSG}</div>;
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </td>
                   <td className="px-4 py-2">{r.departmentName || '—'}</td>
                   <td className="px-4 py-2">{r.appointmentName || '—'}</td>
                   <td className="px-4 py-2">
@@ -693,6 +744,100 @@ const EmployeesWithPDS = () => {
           </tbody>
         </table>
       </div>
+      
+      {/* Pagination */}
+      {totalRecords > 0 && (
+        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+          <div className="flex-1 flex justify-between sm:hidden">
+            <button
+              onClick={goToPreviousPage}
+              disabled={currentPage === 1}
+              className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <button
+              onClick={goToNextPage}
+              disabled={currentPage === totalPages}
+              className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-700">Show:</label>
+                <select
+                  value={recordsPerPage}
+                  onChange={(e) => setRecordsPerPage(Number(e.target.value))}
+                  className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value={10}>10</option>
+                  <option value={30}>30</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <span className="text-sm text-gray-700">entries</span>
+              </div>
+              <div className="text-sm text-gray-700">
+                Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
+                <span className="font-medium">{Math.min(endIndex, totalRecords)}</span> of{' '}
+                <span className="font-medium">{totalRecords}</span> results
+              </div>
+            </div>
+            <div>
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <button
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="sr-only">Previous</span>
+                  <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => goToPage(pageNum)}
+                      className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                        currentPage === pageNum
+                          ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                          : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={goToNextPage}
+                  disabled={currentPage === totalPages}
+                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="sr-only">Next</span>
+                  <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </nav>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">

@@ -34,6 +34,10 @@ const DTRAssignShift = () => {
   const [expanded, setExpanded] = useState({});
   const [assignmentsByEmp, setAssignmentsByEmp] = useState({});
   const [search, setSearch] = useState('');
+  const [shiftFilter, setShiftFilter] = useState('all'); // 'all', 'no', 'with'
+  const [selectedShiftId, setSelectedShiftId] = useState(''); // For filtering by specific shift
+  const [currentPage, setCurrentPage] = useState(1);
+  const [recordsPerPage, setRecordsPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
   const [shifts, setShifts] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -93,12 +97,77 @@ const DTRAssignShift = () => {
 
   const filteredEmployees = useMemo(() => {
     const q = (search || '').toLowerCase();
-    return (employees || []).filter(e => {
+    let filtered = (employees || []).filter(e => {
       const formal = formatEmployeeName(e.surname, e.firstname, e.middlename, e.extension).toLowerCase();
       const full = (e.fullname || '').toLowerCase();
       return formal.includes(q) || full.includes(q);
     });
-  }, [employees, search]);
+    
+    // Apply shift filter
+    if (shiftFilter === 'no') {
+      // Filter employees with no shifts
+      filtered = filtered.filter(e => {
+        const assignments = assignmentsByEmp[e.objid] || [];
+        return assignments.length === 0;
+      });
+    } else if (shiftFilter === 'with') {
+      // Filter employees with shifts
+      filtered = filtered.filter(e => {
+        const assignments = assignmentsByEmp[e.objid] || [];
+        if (assignments.length === 0) return false;
+        
+        // If specific shift is selected, filter by that shift
+        if (selectedShiftId) {
+          return assignments.some(a => String(a.shiftid) === String(selectedShiftId));
+        }
+        
+        // Otherwise, just show employees with any shift
+        return true;
+      });
+    }
+    
+    return filtered;
+  }, [employees, search, shiftFilter, selectedShiftId, assignmentsByEmp]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredEmployees.length / recordsPerPage);
+  const startIndex = (currentPage - 1) * recordsPerPage;
+  const endIndex = startIndex + recordsPerPage;
+  const paginatedEmployees = filteredEmployees.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters or records per page changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, shiftFilter, selectedShiftId, recordsPerPage]);
+
+  // Handle page change
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  // Handle records per page change
+  const handleRecordsPerPageChange = (e) => {
+    setRecordsPerPage(Number(e.target.value));
+  };
+
+  // Pagination navigation handlers (matching EmployeeManagement pattern)
+  const goToPage = (page) => {
+    handlePageChange(page);
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      handlePageChange(currentPage - 1);
+    }
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      handlePageChange(currentPage + 1);
+    }
+  };
 
   const toggleExpand = async (emp) => {
     if (!canRead) return;
@@ -268,35 +337,89 @@ const DTRAssignShift = () => {
         <h2 className="text-xl font-semibold">Assign Shift</h2>
       </div>
       <div className="bg-white p-3 rounded-md shadow mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-1">
-            <label className="text-sm text-gray-600">Employee Search</label>
-            <input className="mt-1 w-full border rounded px-3 py-2" placeholder="Type name…" value={search} onChange={(e)=>setSearch(e.target.value)} disabled={!canRead} />
+            <label className="text-sm text-gray-600">Search Employees</label>
+            <input 
+              className="mt-1 w-full border rounded px-3 py-2" 
+              placeholder="Type name…" 
+              value={search} 
+              onChange={(e)=>setSearch(e.target.value)} 
+              disabled={!canRead} 
+            />
           </div>
-          <div className="md:col-span-2 flex items-end gap-2">
+          <div className="md:col-span-1">
+            <label className="text-sm text-gray-600">Shifts</label>
+            <select 
+              className="mt-1 w-full border rounded px-3 py-2" 
+              value={shiftFilter} 
+              onChange={(e) => {
+                setShiftFilter(e.target.value);
+                if (e.target.value !== 'with') {
+                  setSelectedShiftId(''); // Clear selected shift when not filtering by "With Shifts"
+                }
+              }}
+              disabled={!canRead}
+            >
+              <option value="all">All</option>
+              <option value="no">No Shifts</option>
+              <option value="with">With Shifts</option>
+            </select>
+          </div>
+          {shiftFilter === 'with' && (
+            <div className="md:col-span-1">
+              <label className="text-sm text-gray-600">Select Shift</label>
+              <select 
+                className="mt-1 w-full border rounded px-3 py-2" 
+                value={selectedShiftId} 
+                onChange={(e)=>setSelectedShiftId(e.target.value)}
+                disabled={!canRead}
+              >
+                <option value="">All Shifts</option>
+                {shifts.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.shiftname} ({s.shifttimemode}) {fmtTime(s.shift_checkin)} - {fmtTime(s.shift_checkout)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="md:col-span-1 flex items-end gap-2">
             <div className="flex-1">
               <label className="text-sm text-gray-600">Assign To All</label>
-              <select className="mt-1 w-full border rounded px-3 py-2" value={bulkShiftId} onChange={(e)=>setBulkShiftId(e.target.value)} disabled={!canCreate}>
+              <select 
+                className="mt-1 w-full border rounded px-3 py-2" 
+                value={bulkShiftId} 
+                onChange={(e)=>setBulkShiftId(e.target.value)} 
+                disabled={!canCreate}
+              >
                 <option value="">Select shift…</option>
                 {shifts.map(s => (
-                  <option key={s.id} value={s.id}>{s.shiftname} ({s.shifttimemode}) {fmtTime(s.shift_checkin)} - {fmtTime(s.shift_checkout)}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.shiftname} ({s.shifttimemode}) {fmtTime(s.shift_checkin)} - {fmtTime(s.shift_checkout)}
+                  </option>
                 ))}
               </select>
             </div>
             {canCreate && (
-              <button className="h-10 px-4 rounded bg-blue-600 text-white disabled:opacity-60" disabled={bulkLoading || !bulkShiftId} onClick={bulkAssign}>
-              {bulkLoading ? 'Assigning…' : 'Assign To All'}
+              <button 
+                className="h-10 px-4 rounded bg-blue-600 text-white disabled:opacity-60" 
+                disabled={bulkLoading || !bulkShiftId} 
+                onClick={bulkAssign}
+              >
+                {bulkLoading ? 'Assigning…' : 'Assign To All'}
               </button>
             )}
           </div>
         </div>
+        
       </div>
 
       {loading ? (
         <div className="text-gray-500">Loading…</div>
       ) : (
         <div className="bg-white rounded-lg shadow">
-          {(filteredEmployees || []).map(emp => {
+          {(paginatedEmployees || []).map(emp => {
             const name = formatEmployeeName(emp.surname, emp.firstname, emp.middlename, emp.extension);
             const isOpen = !!expanded[emp.objid];
             const rows = assignmentsByEmp[emp.objid] || [];
@@ -428,6 +551,104 @@ const DTRAssignShift = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {filteredEmployees.length > 0 && (
+        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+          <div className="flex-1 flex justify-between sm:hidden">
+            <button
+              onClick={goToPreviousPage}
+              disabled={currentPage === 1}
+              className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <button
+              onClick={goToNextPage}
+              disabled={currentPage === totalPages}
+              className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+          <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-700">Show:</label>
+                <select
+                  value={recordsPerPage}
+                  onChange={handleRecordsPerPageChange}
+                  className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value={10}>10</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <span className="text-sm text-gray-700">entries</span>
+              </div>
+              
+              <div className="text-sm text-gray-700">
+                Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
+                <span className="font-medium">{Math.min(endIndex, filteredEmployees.length)}</span> of{' '}
+                <span className="font-medium">{filteredEmployees.length}</span> results
+              </div>
+            </div>
+            <div>
+              <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                <button
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 1}
+                  className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="sr-only">Previous</span>
+                  <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                
+                {/* Page Numbers */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => goToPage(pageNum)}
+                      className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                        currentPage === pageNum
+                          ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
+                          : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                
+                <button
+                  onClick={goToNextPage}
+                  disabled={currentPage === totalPages}
+                  className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="sr-only">Next</span>
+                  <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </nav>
+            </div>
+          </div>
         </div>
       )}
 

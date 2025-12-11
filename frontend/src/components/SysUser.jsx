@@ -42,6 +42,7 @@ const SysUser = () => {
   const [expandedUserTypes, setExpandedUserTypes] = useState(new Set());
   const [userRolesMap, setUserRolesMap] = useState(new Map()); // Maps usertypeid -> array of role records
   const [roleCountsMap, setRoleCountsMap] = useState(new Map()); // Maps usertypeid -> count
+  const [expandedComponentGroups, setExpandedComponentGroups] = useState(new Map()); // Maps usertypeid -> Set of expanded group names
   const [loadingUserRoles, setLoadingUserRoles] = useState(false);
   // Add Role modal states
   const [showAddRoleModal, setShowAddRoleModal] = useState(false);
@@ -1381,182 +1382,263 @@ const SysUser = () => {
                         Add Permission
                       </button>
                     </div>
-                    {/* Nested Grid */}
+                    {/* Nested Grid - Grouped by Component Group */}
                     {expandedUserTypes.has(userType.id) && (
                       <div className="overflow-x-auto">
                         {loadingUserRoles ? (
                           <div className="p-4 text-center text-gray-500">Loading roles...</div>
-                        ) : (
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Component Name</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Menu Panel</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Approve</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Return</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Cancel</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Print</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Read</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Create</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Update</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Delete</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Soft Delete</th>
-                                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200 text-sm">
-                              {(userRolesMap.get(userType.id) || []).length === 0 ? (
-                                <tr>
-                                  <td colSpan="12" className="px-4 py-8 text-center text-gray-500">
-                                    No roles found
-                                  </td>
-                                </tr>
-                              ) : (
-                                (userRolesMap.get(userType.id) || []).map((role) => (
-                                  <tr key={role.id}>
-                                    <td className="px-4 py-2">
-                                      <div>
-                                        <div className="font-semibold text-gray-900">
-                                          {role.panelmenuname || 'Untitled Panel'}
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                          {(role.componentgroup || '–') + ' • ' + (role.componentname || '—')}
+                        ) : (() => {
+                          const roles = userRolesMap.get(userType.id) || [];
+                          
+                          // Group roles by componentgroup
+                          const groupedRoles = roles.reduce((acc, role) => {
+                            const groupName = role.componentgroup || 'Uncategorized';
+                            if (!acc[groupName]) {
+                              acc[groupName] = [];
+                            }
+                            acc[groupName].push(role);
+                            return acc;
+                          }, {});
+                          
+                          const groupNames = Object.keys(groupedRoles).sort();
+                          
+                          if (groupNames.length === 0) {
+                            return (
+                              <div className="p-4 text-center text-gray-500">
+                                No roles found
+                              </div>
+                            );
+                          }
+                          
+                          return (
+                            <div className="divide-y divide-gray-200">
+                              {groupNames.map((groupName) => {
+                                const groupRoles = groupedRoles[groupName];
+                                const expandedGroupsForType = expandedComponentGroups.get(userType.id) || new Set();
+                                const isGroupExpanded = expandedGroupsForType.has(groupName);
+                                
+                                return (
+                                  <div key={groupName} className="border-b border-gray-200">
+                                    {/* Component Group Header */}
+                                    <div 
+                                      className="px-4 py-3 bg-gray-50 hover:bg-gray-100 cursor-pointer flex items-center justify-between"
+                                      onClick={() => {
+                                        const newMap = new Map(expandedComponentGroups);
+                                        const groupsSet = new Set(expandedGroupsForType);
+                                        
+                                        if (isGroupExpanded) {
+                                          groupsSet.delete(groupName);
+                                        } else {
+                                          groupsSet.add(groupName);
+                                        }
+                                        
+                                        newMap.set(userType.id, groupsSet);
+                                        setExpandedComponentGroups(newMap);
+                                      }}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <button
+                                          type="button"
+                                          className="inline-flex items-center justify-center w-5 h-5 text-gray-600 hover:text-gray-800 transition-transform"
+                                          style={{ transform: isGroupExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const newMap = new Map(expandedComponentGroups);
+                                            const groupsSet = new Set(expandedGroupsForType);
+                                            
+                                            if (isGroupExpanded) {
+                                              groupsSet.delete(groupName);
+                                            } else {
+                                              groupsSet.add(groupName);
+                                            }
+                                            
+                                            newMap.set(userType.id, groupsSet);
+                                            setExpandedComponentGroups(newMap);
+                                          }}
+                                        >
+                                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                          </svg>
+                                        </button>
+                                        <div>
+                                          <div className="font-semibold text-gray-900">{groupName}</div>
+                                          <div className="text-xs text-gray-500">{groupRoles.length} permission{groupRoles.length !== 1 ? 's' : ''}</div>
                                         </div>
                                       </div>
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={role.canaccesspage === 1}
-                                          onChange={(e) => handlePermissionToggle(userType, role, 'canaccesspage', e.target.checked)}
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
-                                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
-                                      </label>
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={role.canapprove === 1}
-                                          onChange={(e) => handlePermissionToggle(userType, role, 'canapprove', e.target.checked)}
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
-                                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
-                                      </label>
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={role.canreturn === 1}
-                                          onChange={(e) => handlePermissionToggle(userType, role, 'canreturn', e.target.checked)}
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
-                                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
-                                      </label>
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={role.cancancel === 1}
-                                          onChange={(e) => handlePermissionToggle(userType, role, 'cancancel', e.target.checked)}
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
-                                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
-                                      </label>
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={role.canprint === 1}
-                                          onChange={(e) => handlePermissionToggle(userType, role, 'canprint', e.target.checked)}
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
-                                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
-                                      </label>
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={role.canread === 1}
-                                          onChange={(e) => handlePermissionToggle(userType, role, 'canread', e.target.checked)}
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
-                                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
-                                      </label>
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={role.cancreate === 1}
-                                          onChange={(e) => handlePermissionToggle(userType, role, 'cancreate', e.target.checked)}
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
-                                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
-                                      </label>
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={role.canupdate === 1}
-                                          onChange={(e) => handlePermissionToggle(userType, role, 'canupdate', e.target.checked)}
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
-                                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
-                                      </label>
-                                    </td>
-                                    <td className="px-4 py-2 text-center">{role.candelete === 1 ? '✓' : '—'}</td>
-                                    <td className="px-4 py-2 text-center">
-                                      <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={role.cansoftdelete === 1}
-                                          onChange={(e) => handlePermissionToggle(userType, role, 'cansoftdelete', e.target.checked)}
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
-                                        <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
-                                      </label>
-                                    </td>
-                                    <td className="px-4 py-2 text-center">
-                                      <div className="flex items-center justify-center space-x-2">
-                                        <button
-                                          onClick={() => openAddRoleModal(userType, role)}
-                                          className="text-blue-600 hover:text-blue-800 transition-colors"
-                                          title="Edit Role"
-                                        >
-                                          ✏️
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteRole(userType, role)}
-                                          className="text-red-600 hover:text-red-800 transition-colors"
-                                          title="Delete Role"
-                                        >
-                                          🗑️
-                                        </button>
+                                    </div>
+                                    
+                                    {/* Grouped Roles Table */}
+                                    {isGroupExpanded && (
+                                      <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-gray-200">
+                                          <thead className="bg-gray-50">
+                                            <tr>
+                                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Component Name</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Menu Panel</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Approve</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Return</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Cancel</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Print</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Read</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Create</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Update</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Delete</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Soft Delete</th>
+                                              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="bg-white divide-y divide-gray-200 text-sm">
+                                            {groupRoles.map((role) => (
+                                              <tr key={role.id}>
+                                                <td className="px-4 py-2">
+                                                  <div>
+                                                    <div className="font-semibold text-gray-900">
+                                                      {role.panelmenuname || 'Untitled Panel'}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500">
+                                                      {role.componentname || '—'}
+                                                    </div>
+                                                  </div>
+                                                </td>
+                                                <td className="px-4 py-2 text-center">
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={role.canaccesspage === 1}
+                                                      onChange={(e) => handlePermissionToggle(userType, role, 'canaccesspage', e.target.checked)}
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
+                                                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+                                                  </label>
+                                                </td>
+                                                <td className="px-4 py-2 text-center">
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={role.canapprove === 1}
+                                                      onChange={(e) => handlePermissionToggle(userType, role, 'canapprove', e.target.checked)}
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
+                                                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+                                                  </label>
+                                                </td>
+                                                <td className="px-4 py-2 text-center">
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={role.canreturn === 1}
+                                                      onChange={(e) => handlePermissionToggle(userType, role, 'canreturn', e.target.checked)}
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
+                                                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+                                                  </label>
+                                                </td>
+                                                <td className="px-4 py-2 text-center">
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={role.cancancel === 1}
+                                                      onChange={(e) => handlePermissionToggle(userType, role, 'cancancel', e.target.checked)}
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
+                                                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+                                                  </label>
+                                                </td>
+                                                <td className="px-4 py-2 text-center">
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={role.canprint === 1}
+                                                      onChange={(e) => handlePermissionToggle(userType, role, 'canprint', e.target.checked)}
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
+                                                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+                                                  </label>
+                                                </td>
+                                                <td className="px-4 py-2 text-center">
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={role.canread === 1}
+                                                      onChange={(e) => handlePermissionToggle(userType, role, 'canread', e.target.checked)}
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
+                                                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+                                                  </label>
+                                                </td>
+                                                <td className="px-4 py-2 text-center">
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={role.cancreate === 1}
+                                                      onChange={(e) => handlePermissionToggle(userType, role, 'cancreate', e.target.checked)}
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
+                                                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+                                                  </label>
+                                                </td>
+                                                <td className="px-4 py-2 text-center">
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={role.canupdate === 1}
+                                                      onChange={(e) => handlePermissionToggle(userType, role, 'canupdate', e.target.checked)}
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
+                                                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+                                                  </label>
+                                                </td>
+                                                <td className="px-4 py-2 text-center">{role.candelete === 1 ? '✓' : '—'}</td>
+                                                <td className="px-4 py-2 text-center">
+                                                  <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      className="sr-only peer"
+                                                      checked={role.cansoftdelete === 1}
+                                                      onChange={(e) => handlePermissionToggle(userType, role, 'cansoftdelete', e.target.checked)}
+                                                    />
+                                                    <div className="w-11 h-6 bg-gray-200 rounded-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-offset-2 peer-focus:ring-blue-500 transition-colors peer-checked:bg-blue-500"></div>
+                                                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5"></div>
+                                                  </label>
+                                                </td>
+                                                <td className="px-4 py-2 text-center">
+                                                  <div className="flex items-center justify-center space-x-2">
+                                                    <button
+                                                      onClick={() => openAddRoleModal(userType, role)}
+                                                      className="text-blue-600 hover:text-blue-800 transition-colors"
+                                                      title="Edit Role"
+                                                    >
+                                                      ✏️
+                                                    </button>
+                                                    <button
+                                                      onClick={() => handleDeleteRole(userType, role)}
+                                                      className="text-red-600 hover:text-red-800 transition-colors"
+                                                      title="Delete Role"
+                                                    >
+                                                      🗑️
+                                                    </button>
+                                                  </div>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
                                       </div>
-                                    </td>
-                                  </tr>
-                                ))
-                              )}
-                            </tbody>
-                          </table>
-                        )}
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>

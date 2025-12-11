@@ -34,6 +34,9 @@ import employeeDesignationRoutes from './routes/201employeeDesignationRoutes.js'
 import employeeLocatorRoutes from './routes/201EmployeeLocatorRoutes.js'; // 201 Employee Locator Routes
 import employeeTravelsRoutes from './routes/201EmployeeTravelsRoutes.js'; // 201 Employee Travels Routes
 import employeesWithPDSRoutes from './routes/201EmployeesWithPDSRoutes.js'; // 201 Employees With PDS
+import plantillaRoutes from './routes/201PlantillaRoutes.js'; // 201 Plantilla Routes
+import plantillaTranchesRoutes from './routes/201PlantillaTranchesRoutes.js'; // 201 Plantilla Tranches Routes
+import plantillaReportsRoutes from './routes/201PlantillaReportsRoutes.js'; // 201 Plantilla Reports Routes
 import dtrShiftsRoutes from './routes/DTRShiftsRoutes.js'; // DTR Shifts Routes
 import dtrAssignedShiftsRoutes from './routes/DTRAssignedShiftsRoutes.js'; // DTR Assigned Shifts Routes
 import sysUsersRoutes from './routes/sysUsersRoutes.js'; // System Users Routes
@@ -153,6 +156,9 @@ app.use('/api/employee-designations', employeeDesignationRoutes); // Employee De
 app.use('/api/employee-locators', employeeLocatorRoutes); // Employee Locators Routes
 app.use('/api/employee-travels', employeeTravelsRoutes); // Employee Travels Routes
 app.use('/api/201-employees-with-pds', employeesWithPDSRoutes); // 201 Employees With PDS
+app.use('/api/201-plantilla', plantillaRoutes); // 201 Plantilla Routes
+app.use('/api/201-plantilla-tranches', plantillaTranchesRoutes); // 201 Plantilla Tranches Routes
+app.use('/api/201-plantilla-reports', plantillaReportsRoutes); // 201 Plantilla Reports Routes
 app.use('/api/dtr-shifts', dtrShiftsRoutes); // DTR Shifts
 app.use('/api/dtr-assigned-shifts', dtrAssignedShiftsRoutes); // DTR Assigned Shifts
 app.use('/api', sysUsersRoutes); // System Users Routes

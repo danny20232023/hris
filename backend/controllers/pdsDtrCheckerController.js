@@ -39,8 +39,14 @@ export const getPDSForCurrentUser = async (req, res) => {
         console.warn('⚠️ Unable to fetch BADGENUMBER from MSSQL USERINFO:', e.message);
       }
       // Get main employee data by dtruserid (normalize for string/padded columns)
+      // Format birthdate as string to avoid timezone conversion issues
       const [employees] = await connection.execute(
-        'SELECT * FROM employees WHERE TRIM(CAST(dtruserid AS CHAR)) = ? LIMIT 1',
+        `SELECT 
+          *,
+          DATE_FORMAT(birthdate, '%Y-%m-%d') AS birthdate_formatted
+        FROM employees 
+        WHERE TRIM(CAST(dtruserid AS CHAR)) = ? 
+        LIMIT 1`,
         [String(userId)]
       );
       
@@ -384,7 +390,8 @@ export const getPDSForCurrentUser = async (req, res) => {
         // Map gender back to sex for frontend compatibility
         sex: employee.gender || '',
         // Map birthdate/birthplace to date_of_birth/place_of_birth for frontend compatibility
-        date_of_birth: formatDateForFrontend(employee.birthdate),
+        // Use formatted date string if available, otherwise format the original birthdate
+        date_of_birth: employee.birthdate_formatted || formatDateForFrontend(employee.birthdate),
         place_of_birth: employee.birthplace || '',
         // Map citizenship fields
         citizenship_filipino: true, // Always true as per requirement

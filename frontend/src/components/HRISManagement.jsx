@@ -32,6 +32,8 @@ import EmployeesTabs from './201/EmployeesTabs';
 import EmployeeLeaves from './201/201EmployeeLeaves';
 import EmployeeLocator201 from './201/201EmployeeLocator';
 import EmployeeTravel201 from './201/201EmployeeTravel';
+import PlantillaTabs from './201/201Plantillatab';
+import Plantilla201Reports from './201/201PlantillaReports';
 
 // Payroll Module Components
 import PayrollDashboard from './Payroll/PayrollDashboard';
@@ -67,6 +69,7 @@ const HRISManagement = () => {
   const [payrollExpanded, setPayrollExpanded] = useState(false);
   const [reportsExpanded, setReportsExpanded] = useState(false);
   const [dtrReportsExpanded, setDtrReportsExpanded] = useState(false);
+  const [reports201Expanded, setReports201Expanded] = useState(false);
   const [systemExpanded, setSystemExpanded] = useState(false);
   
   // User dropdown
@@ -131,6 +134,7 @@ const HRISManagement = () => {
       if (typeof saved.payrollExpanded === 'boolean') setPayrollExpanded(saved.payrollExpanded);
       if (typeof saved.reportsExpanded === 'boolean') setReportsExpanded(saved.reportsExpanded);
       if (typeof saved.dtrReportsExpanded === 'boolean') setDtrReportsExpanded(saved.dtrReportsExpanded);
+      if (typeof saved.reports201Expanded === 'boolean') setReports201Expanded(saved.reports201Expanded);
       if (typeof saved.systemExpanded === 'boolean') setSystemExpanded(saved.systemExpanded);
     } catch {}
   }, []);
@@ -147,12 +151,13 @@ const HRISManagement = () => {
       payrollExpanded,
       reportsExpanded,
       dtrReportsExpanded,
+      reports201Expanded,
       systemExpanded,
     };
     try {
       localStorage.setItem('hrisNavState', JSON.stringify(state));
     } catch {}
-  }, [activeModule, activeTab, activeSubTab, sidebarOpen, dtrMenuExpanded, files201Expanded, payrollExpanded, reportsExpanded, dtrReportsExpanded, systemExpanded]);
+  }, [activeModule, activeTab, activeSubTab, sidebarOpen, dtrMenuExpanded, files201Expanded, payrollExpanded, reportsExpanded, dtrReportsExpanded, reports201Expanded, systemExpanded]);
   
   // Company branding
   const [companyData, setCompanyData] = useState({
@@ -230,8 +235,11 @@ const HRISManagement = () => {
     setActiveTab(tabId);
     if (!hasSubMenu) {
       setActiveSubTab('');
-    } else     if (tabId === 'DTR-Reports') {
+    } else if (tabId === 'DTR-Reports') {
       setDtrReportsExpanded(!dtrReportsExpanded);
+      return;
+    } else if (tabId === '201-Reports') {
+      setReports201Expanded(!reports201Expanded);
       return;
     }
     if (tabId === 'system-setup') {
@@ -443,6 +451,9 @@ const HRISManagement = () => {
     if (componentId === 'dtr-cdo') return <DTREmployee_cdo />;
     if (componentId === 'dtr-ot-tab') return <DTROTtab />;
     
+    // 201 Reports
+    if (componentId === '201-plantilla-reports' || (activeTab === '201-Reports' && activeSubTab === '201-plantilla-reports')) return <Plantilla201Reports />;
+    
     // Portal Users component (under DTR parent menu)
     if (componentId === 'portal-users') return <DTRPortalUsersTabs />;
     if (componentId === 'enroll-bio') return <EnrollEmployeeBio />;
@@ -473,6 +484,7 @@ const HRISManagement = () => {
         />
       );
     }
+    if (componentId === '201-plantilla-tabs') return <PlantillaTabs />;
     if (componentId === '201-leave') return <EmployeeLeaves />;
     if (componentId === '201-locator') return <EmployeeLocator201 />;
     if (componentId === '201-travel') return <EmployeeTravel201 />;
@@ -798,6 +810,12 @@ const HRISManagement = () => {
                   <span className="flex-1 text-left">Employees</span>
                 </button>
                 )}
+                {(canAccessPage('201-plantilla') || canAccessPage('201-plantilla-tranches') || canAccessPage('201-plantilla-rates')) && (
+                <button onClick={() => { setActiveTab('201-plantilla-tabs'); setActiveSubTab(''); }} className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-200 ${activeTab === '201-plantilla-tabs' ? 'bg-green-50 text-green-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
+                  <span className="mr-2">📊</span>
+                  <span className="flex-1 text-left">Plantilla</span>
+                </button>
+                )}
                 {canAccessPage('201-leave') && (
                 <button onClick={() => { setActiveTab('201-leave'); setActiveSubTab(''); }} className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-200 ${activeTab === '201-leave' ? 'bg-green-50 text-green-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
                   <span className="mr-2">🏖️</span>
@@ -920,6 +938,34 @@ const HRISManagement = () => {
                   <span className="flex-1 text-left">Computed Attendances</span>
                 </button>
                 )}
+                  </div>
+                )}
+                
+                {/* 201 Submenu */}
+                <button
+                  onClick={() => handleTabClick('201-Reports', true)}
+                  className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${activeTab === '201-Reports' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                >
+                  <span className="mr-2">📋</span>
+                  <span className="flex-1 text-left">201</span>
+                  <svg 
+                    className={`w-3 h-3 transition-transform duration-200 ${reports201Expanded ? 'rotate-90' : ''}`}
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+                
+                {reports201Expanded && (
+                  <div className="ml-6 mt-1 space-y-1">
+                    {canAccessPage('201-plantilla-reports') && (
+                      <button onClick={() => { setActiveTab('201-Reports'); setActiveSubTab('201-plantilla-reports'); }} className={`w-full flex items-center px-3 py-2 text-sm rounded-md transition-colors duration-200 ${activeSubTab === '201-plantilla-reports' ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-600 hover:bg-gray-50'}`}>
+                        <span className="mr-2">👥</span>
+                        <span className="flex-1 text-left">Plantilla of Personnel</span>
+                      </button>
+                    )}
                   </div>
                 )}
                 

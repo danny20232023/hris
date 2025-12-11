@@ -4,7 +4,7 @@ import api from '../../utils/api';
 import MyPdsPrint from './MyPdsPrint';
 import { getFieldLimit, validateFieldLength, getFieldDisplayName, PDS_FIELD_LIMITS } from '../../utils/pdsFieldLimits';
 
-const PdsDtrChecker = ({ onBack, onSave }) => {
+const PdsDtrChecker = ({ onBack, onSave, onClose }) => {
   const { user } = useAuth();
   const [activePage, setActivePage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -511,6 +511,37 @@ const PdsDtrChecker = ({ onBack, onSave }) => {
     console.log('✅ [PDS] Form state reset completed');
   };
 
+  // Helper function to format date for date input without timezone conversion
+  const getDateValueForInput = (dateValue) => {
+    if (!dateValue) return '';
+    
+    const stringValue = String(dateValue).trim();
+    
+    // If already in YYYY-MM-DD format, return as is (no timezone conversion)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(stringValue)) {
+      return stringValue;
+    }
+    
+    // If it's an ISO date string with time (YYYY-MM-DDTHH:MM:SS), extract just the date part
+    if (stringValue.includes('T')) {
+      const datePart = stringValue.split('T')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+        return datePart;
+      }
+    }
+    
+    // If it's a date string with space separator (YYYY-MM-DD HH:MM:SS), extract date part
+    if (stringValue.includes(' ')) {
+      const datePart = stringValue.split(' ')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+        return datePart;
+      }
+    }
+    
+    // If no valid format found, return empty string
+    return '';
+  };
+
   useEffect(() => {
     fetchLookupData();
   }, []);
@@ -586,35 +617,10 @@ const PdsDtrChecker = ({ onBack, onSave }) => {
           
           // Handle date formatting for date inputs
           if (key === 'date_of_birth' && value) {
-            // Extract date part directly from string without timezone conversion
-            const stringValue = String(value).trim();
-            
-            // If already in YYYY-MM-DD format, return as is
-            if (/^\d{4}-\d{2}-\d{2}$/.test(stringValue)) {
-              return [key, stringValue];
-            }
-            
-            // If it's an ISO date string with time, extract just the date part (before 'T')
-            if (stringValue.includes('T')) {
-              const datePart = stringValue.split('T')[0];
-              if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-                console.log(`📅 [PDS] Extracting date from ISO: ${value} -> ${datePart}`);
-                return [key, datePart];
-              }
-            }
-            
-            // If it's a date string with space separator (YYYY-MM-DD HH:MM:SS), extract date part
-            if (stringValue.includes(' ')) {
-              const datePart = stringValue.split(' ')[0];
-              if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-                console.log(`📅 [PDS] Extracting date from datetime: ${value} -> ${datePart}`);
-                return [key, datePart];
-              }
-            }
-            
-            // If no valid format found, return empty string
-            console.log(`⚠️ [PDS] Invalid date format: ${value}`);
-            return [key, ''];
+            // Use getDateValueForInput to extract date without timezone conversion
+            const dateValue = getDateValueForInput(value);
+            console.log(`📅 [PDS] Processing date_of_birth: ${value} -> ${dateValue}`);
+            return [key, dateValue];
           }
           
           // Ensure all string values are properly handled
@@ -650,7 +656,7 @@ const PdsDtrChecker = ({ onBack, onSave }) => {
         // Ensure each child has the required fields with proper defaults
         const formattedChildren = pdsData.children.map(child => ({
           full_name: child.full_name || '',
-          date_of_birth: child.date_of_birth || ''
+          date_of_birth: getDateValueForInput(child.date_of_birth || '')
         }));
         setChildren(formattedChildren);
         console.log('📅 [PDS] Loaded children:', formattedChildren);
@@ -2703,7 +2709,7 @@ const PdsDtrChecker = ({ onBack, onSave }) => {
             <input
               type="date"
               name="date_of_birth"
-              value={sanitizeValue(formData.date_of_birth)}
+              value={getDateValueForInput(formData.date_of_birth)}
               onChange={handleChange}
               disabled={isFormDisabled}
               className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isFormDisabled ? 'bg-gray-100 cursor-not-allowed' : ''}`}
@@ -3130,7 +3136,7 @@ const PdsDtrChecker = ({ onBack, onSave }) => {
                   <input 
                     name={`children[${index}].date_of_birth`} 
                     type="date" 
-                    value={child.date_of_birth} 
+                    value={getDateValueForInput(child.date_of_birth)} 
                     onChange={(e) => updateChild(index, 'date_of_birth', e.target.value)}
                     className="px-3 py-2 border border-gray-300 rounded-lg w-full" 
                   />

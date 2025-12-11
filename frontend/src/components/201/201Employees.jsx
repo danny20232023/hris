@@ -7,6 +7,7 @@ const Employees201 = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pdsFilter, setPdsFilter] = useState('all'); // 'all', 'with', 'no'
   const [stats, setStats] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
@@ -67,8 +68,8 @@ const Employees201 = () => {
 
   // Filter employees
   const filteredEmployees = employees.filter(emp => {
-    if (!searchTerm) return true;
-    
+    // Search filter
+    const matchesSearch = !searchTerm || (() => {
     const search = searchTerm.toLowerCase();
     return (
       emp.NAME?.toLowerCase().includes(search) ||
@@ -76,6 +77,14 @@ const Employees201 = () => {
       emp.DTRuserID?.toString().includes(search) ||
       emp.Department?.toLowerCase().includes(search)
     );
+    })();
+    
+    // PDS filter
+    const matchesPdsFilter = pdsFilter === 'all' || 
+      (pdsFilter === 'with' && emp.hasPDS) ||
+      (pdsFilter === 'no' && !emp.hasPDS);
+    
+    return matchesSearch && matchesPdsFilter;
   });
 
   // Pagination calculations
@@ -84,10 +93,10 @@ const Employees201 = () => {
   const endIndex = startIndex + recordsPerPage;
   const paginatedEmployees = filteredEmployees.slice(startIndex, endIndex);
 
-  // Reset to page 1 when search term or records per page changes
+  // Reset to page 1 when search term, PDS filter, or records per page changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, recordsPerPage]);
+  }, [searchTerm, pdsFilter, recordsPerPage]);
 
   // Handle page change
   const handlePageChange = (page) => {
@@ -187,9 +196,9 @@ const Employees201 = () => {
         </div>
       )}
 
-      {/* Search & Action Buttons - Remove duplicate section */}
+      {/* Search & Action Buttons */}
       <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-4">
           <div className="flex-1 max-w-lg">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Search Employee
@@ -202,7 +211,21 @@ const Employees201 = () => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
-          <div className="ml-4 flex space-x-3">
+          <div className="flex-1 max-w-xs">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Has PDS
+            </label>
+            <select
+              value={pdsFilter}
+              onChange={(e) => setPdsFilter(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              <option value="all">All</option>
+              <option value="with">With PDS</option>
+              <option value="no">No PDS</option>
+            </select>
+          </div>
+          <div className="flex items-end">
             <button
               onClick={fetchEmployees}
               className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 flex items-center space-x-2"
